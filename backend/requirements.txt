@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+yfinance
+pandas
+numpy
+scikit-learn
+statsmodels
+pyjwt
+anthropic
+pywebview
+pystray
+pillow
+openpyxl
+reportlab
+windows-toasts>=1.3; sys_platform == "win32"
