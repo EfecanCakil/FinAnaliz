@@ -3,6 +3,17 @@
 **Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu**
 Bitirme projesi, yerel masaüstü sürümü. Mimari, ileride web sürümüne geçilebilecek şekilde istemci–sunucu olarak kuruldu.
 
+## Ekran Görüntüleri
+
+**Piyasa Özeti:** Türkiye, ABD, döviz ve kripto piyasalarının genel görünümü, favoriler ve günün bülteni
+![Piyasa Özeti](screenshots/piyasa-ozeti.png)
+
+**Borsa İstanbul:** BIST endeksleri, piyasa genişliği, sektör performansı, günün kazandıranları ve kaybettirenleri
+![Borsa İstanbul](screenshots/borsa-istanbul.png)
+
+**KAP Bildirimleri:** Kamuyu Aydınlatma Platformu bildirimleri; favori ve portföy hisselerine göre filtreleme
+![KAP Bildirimleri](screenshots/kap-bildirimleri.png)
+
 ## Çalıştırma
 
 **Uygulama (exe):** `Uygulama\FinAnaliz.exe` dosyasını açın. Python veya Node.js kurulu olması gerekmez. Uygulama kendi Windows penceresinde (WebView2) açılır. Kullanıcı verileri `%APPDATA%\FinAnaliz` klasöründe tutulur. `Uygulama` klasörü bir bütündür; exe'yi tek başına başka yere taşımayın. Masaüstüne kısayol oluşturmak için exe'ye sağ tıklayıp *Gönder → Masaüstü (kısayol oluştur)* seçeneğini kullanın.
