@@ -51,6 +51,10 @@ cd frontend && npm run dev                  # arayüz: http://localhost:5173 (ca
 | Raporlar | Excel (openpyxl), PDF (reportlab) | `backend/app/export.py` |
 | Strateji testi | SMA kesişimi, RSI, MACD, Bollinger, Al-Tut | `backend/app/backtest.py` |
 | LLM asistanı | Anthropic Claude API (anahtar yoksa kural tabanlı yanıt) | `backend/app/assistant.py` |
+| Halka arz | SPK başvuru/onay listeleri ve KAP (Türkiye), Nasdaq halka arz takvimi (ABD) | `backend/app/ipo.py`, `backend/app/spk.py`, `backend/app/us_ipo.py` |
+| Şirket araştırma | Bilanço özeti, benzer hisseler, kurumsal olaylar, hisse kartı | `backend/app/research.py`, `backend/app/stockcard.py`, `backend/app/earnings.py` |
+| Planlama | Hedef planlayıcı (Monte Carlo), reel getiri, düzenli alım, ABD hisse vergisi | `backend/app/planner.py`, `backend/app/dca.py`, `backend/app/tax.py` |
+| Sicil | Teknik sinyallerin ve YZ tahminlerinin geçmiş başarısı, makro olayların piyasa etkisi | `backend/app/signals.py`, `backend/app/predlog.py`, `backend/app/macro.py` |
 | Veritabanı | SQLite (PostgreSQL'e taşınabilir şema) | `backend/app/db.py` |
 | Kimlik doğrulama | PBKDF2 şifre özeti + JWT | `backend/app/auth.py` |
 
@@ -64,10 +68,26 @@ Kullanıcı verileri `backend/data/` klasöründe tutulur (`finans.db`, `setting
 - **Analiz Asistanı:** seçili varlığın verileriyle doğal dilde soru-cevap
 - **Karşılaştırma:** normalize getiri grafiği, oynaklık, korelasyon matrisi
 - **Strateji Testi:** sermaye ve komisyon ayarlı geri test, işlem listesi, Sharpe oranı, maksimum düşüş
-- **Portföy:** kâr/zarar ve dağılım (para birimine göre)
+- **Portföy:** 100.000 TL sanal bakiyeyle al-sat, kâr/zarar ve dağılım, portföy sağlık skoru, hedef fiyat / zarar sınırı koruması, temettü takvimi
+- **Çoklu Portföy:** "Uzun vade", "Deneme", "Kripto" gibi ayrı bakiyeli portföyler; aralarında geçiş ve performans karşılaştırması
+- **Düzenli Alım Planları:** "her ayın 1'inde 2.000 TL'lik THYAO al" gibi tekrarlayan otomatik alımlar
+- **Hedefler ve Reel Getiri:** birikim hedefi için gereken aylık tutar ve Monte Carlo ile ulaşma olasılığı; kazancın enflasyonu yenip yenmediği
+- **Halka Arz:** Borsa İstanbul (SPK/KAP) ve ABD (Nasdaq) halka arzları: bekleyen başvurular, onaylananlar, geçmiş halka arzların bugünkü getirisi, bedelli/bedelsiz sermaye artırımları; yeni gelişmelerde bildirim
+- **Isı Haritası:** piyasanın renkli haritası; kutu boyu şirket büyüklüğünü, renk günlük değişimi gösterir
+- **Şirket Araştırma:** son bilançonun sade Türkçe 5 maddelik özeti, benzer hisseler, temettü/bölünme/sermaye artırımı geçmişi, bilanço takvimi
+- **Hisse Kartı:** fiyat, kısa grafik, temel oranlar, haberler ve "bugün neden hareket etti?" özeti tek kartta
+- **Sinyal ve Tahmin Sicili:** bir teknik sinyal bu varlıkta geçmişte verildiğinde fiyat ne yaptı; YZ tahminlerinin gerçekleşen fiyatla karşılaştırılan ileriye dönük başarı kaydı
+- **Makro Olaylar:** TCMB/FED faiz kararları ve enflasyon açıklaması günlerinde BIST 100, dolar/TL, altın, S&P 500 ve Bitcoin'in geçmişteki ortalama tepkisi
+- **ABD Hisse Vergisi:** yurt dışı hisse kazançları için FIFO ve enflasyon düzeltmeli tahmini vergi hesabı (eğitim amaçlı)
+- **Bugün Ne Oldu?:** ana sayfada piyasalar, portföy, favoriler ve alarmlar için birkaç sade cümlelik özet
 - **İzleme ve Alarmlar:** izleme listesi ile fiyat alarmları (uygulama içinde ve Windows bildirimi olarak)
+- **Telefondan Erişim:** aynı Wi-Fi ağındaki telefondan QR kodla açma (varsayılan olarak kapalı, tek kullanımlık kodla korunur)
 - **Sistem tepsisi:** pencere kapatılınca uygulama tepside çalışmaya devam eder ve alarmları arka planda izler (Ayarlar'dan kapatılabilir)
-- **Kullanım kolaylığı:** Ctrl+K hızlı arama, açık/koyu tema, ana ekranda favoriler paneli
+- **Kullanım kolaylığı:** Ctrl+K hızlı arama, açık/koyu tema, Basit/Gelişmiş menü modu, ana ekranda favoriler paneli
+
+## Testler
+
+`testleri_calistir.bat` ile `backend/tests/` altındaki pytest testleri çalışır (piyasa verisi, portföy, analiz, güvenlik ve özellik testleri).
 
 ## Test hesabı
 
