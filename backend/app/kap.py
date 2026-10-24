@@ -24,7 +24,7 @@ def _fetch(days: int) -> list[dict]:
     body = json.dumps({"fromDate": (today - timedelta(days=days - 1)).strftime("%d.%m.%Y"), "toDate": today.strftime("%d.%m.%Y"),
                        "disclosureTypes": None, "memberTypes": ["IGS", "DDK"], "mkkMemberOid": None}).encode()
     req = urllib.request.Request(URL, data=body, headers={
-        "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 FinAnaliz", "Referer": "https://www.kap.org.tr/tr"})
+        "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 TradeMetrix", "Referer": "https://www.kap.org.tr/tr"})
     with urllib.request.urlopen(req, timeout=30) as r:
         raw = json.loads(r.read())
     out = []

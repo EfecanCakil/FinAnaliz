@@ -4,19 +4,20 @@ Masaüstü uygulaması bu servisi localhost üzerinde çalıştırır; React ara
 derlenmiş hâliyle aynı sunucudan servis edilir. Swagger dokümantasyonu:
 http://127.0.0.1:8765/docs
 """
+import os
 import threading
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import (academy, account, ai_tools, alerts, assistant, auth, backtest, backup, bots, bulletin, econ, engine, export, fundamentals, indicators,
-               insights, kap, market, ml, news, notifications, orders, patterns, portfolio, quant, screener, universe)
+from . import (academy, account, ai_tools, alerts, applog, dca, earnings, lan, macro, portfolios, predlog, signals, tax, assistant, auth, backtest, backup, bots, bulletin, econ, engine, export, fundamentals, indicators,
+               insights, kap, market, ml, news, notifications, orders, patterns, portfolio, planner, quant, research, screener, stockcard, today, universe, wellness, yahoo, ipo)
 from .db import connect, init_db, rows
 
 for _m, _items in universe.UNIVERSE.items():
@@ -24,17 +25,69 @@ for _m, _items in universe.UNIVERSE.items():
         market.NAME_BY_SYMBOL.setdefault(_a["symbol"], _a["name"])
 
 app = FastAPI(title="Finansal Analiz Platformu API", version="0.1.0")
+# ---------- Güvenlik ----------
+# Masaüstü sürümünde sunucu yalnızca bu bilgisayardan erişilir. "Host" başlığı denetimi, kötü niyetli bir web sitesinin
+# tarayıcı üzerinden yerel sunucuya ulaşmasını (DNS rebinding) engeller. Web (--web) modunda bu kısıt kaldırılır.
+_PUBLIC = os.environ.get("FINANS_PUBLIC") == "1"
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+
+
+@app.middleware("http")
+async def _security(request, call_next):
+    from fastapi.responses import JSONResponse
+    if lan.is_lan_request(request.scope):  # telefondan (yerel ağdan) gelen istek: eşleştirme anahtarı zorunlu
+        from fastapi.responses import HTMLResponse, RedirectResponse
+        given = request.query_params.get(lan.COOKIE)
+        if given and lan.key_ok(given):
+            resp = RedirectResponse(url=request.url.path or "/", status_code=303)
+            resp.set_cookie(lan.COOKIE, given, httponly=True, samesite="strict", max_age=30 * 86400)
+            return resp
+        if not lan.key_ok(request.cookies.get(lan.COOKIE)):
+            return HTMLResponse(status_code=403, content=(
+                "<meta name=viewport content='width=device-width'><body style='font-family:sans-serif;background:#0d1117;color:#e6ebf2;padding:24px'>"
+                "<h2>TradeMetrix</h2><p>Bu cihaz eşleştirilmemiş veya telefondan erişim kapatılmış.</p>"
+                "<p>Bilgisayardaki TradeMetrix'te <b>Ayarlar → Telefondan erişim</b> bölümündeki QR kodu okutun.</p></body>"))
+    else:
+        host = (request.headers.get("host") or "").rsplit(":", 1)[0].lower()
+        if not _PUBLIC and host not in _LOCAL_HOSTS and not host.endswith(".localhost"):
+            return JSONResponse(status_code=400, content={"detail": "Geçersiz istek."})
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")  # hesap verisi tarayıcı önbelleğine yazılmaz
+    return response
+
+
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
+
+
+@app.exception_handler(Exception)
+async def _unexpected(request, exc):  # beklenmeyen hatalar kullanıcıya teknik ayrıntı olmadan, sade dille döner
+    import logging
+    from fastapi.responses import JSONResponse
+    logging.getLogger("finanaliz").exception("Beklenmeyen hata: %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Beklenmeyen bir sorun oluştu. Lütfen biraz sonra tekrar deneyin."})
 
 
 @app.on_event("startup")
 def _startup():
     init_db()
+    applog.setup()
     engine.start()
 
-    def warm():  # teknik tarama ilk açılışta beklemesin diye tüm hisse verisi arka planda hazırlanır
-        for m in ("bist", "us"):
+    def warm():  # sık açılan sayfalar beklemesin diye veriler arka planda önceden hazırlanır
+        try:  # SPK halka arz / sermaye artırımı verisi (yeni bülten varsa bildirim gönderir)
+            ipo.sync()
+        except Exception:
+            pass
+        try:  # piyasa özeti ve piyasa sayfalarındaki öne çıkan varlıklar
+            market.quotes([a["symbol"] for items in market.CATALOG.values() for a in items])
+        except Exception:
+            pass
+        for m in ("bist", "us"):  # tüm hisseler (piyasa listeleri, ısı haritası, teknik tarama)
             try:
                 screener.scan_full([m], "all")
             except Exception:
@@ -46,6 +99,24 @@ def _startup():
 class Credentials(BaseModel):
     username: str
     password: str
+    remember: bool = True
+
+
+class RegisterIn(BaseModel):
+    username: str
+    password: str
+    full_name: str | None = None
+    email: str | None = None
+
+
+class ResetIn(BaseModel):
+    username: str
+    code: str
+    new_password: str
+
+
+class PasswordOnly(BaseModel):
+    password: str | None = None
 
 
 class WatchItem(BaseModel):
@@ -93,25 +164,83 @@ class SettingsIn(BaseModel):
 
 # ---------- Kimlik doğrulama ----------
 @app.post("/api/auth/register")
-def register(c: Credentials):
-    return auth.register(c.username, c.password)
+def register(c: RegisterIn):
+    return auth.register(c.username, c.password, c.full_name, c.email)
 
 
 @app.post("/api/auth/login")
 def login(c: Credentials):
-    return auth.login(c.username, c.password)
+    return auth.login(c.username, c.password, c.remember)
+
+
+@app.post("/api/auth/guest")
+def guest_login():
+    return auth.guest()
+
+
+@app.get("/api/auth/check-username")
+def check_username(u: str):
+    return auth.username_available(u)
+
+
+@app.post("/api/auth/reset")
+def reset_password(body: ResetIn):
+    return auth.reset_with_code(body.username, body.code, body.new_password)
+
+
+@app.post("/api/auth/upgrade")
+def upgrade_guest(body: RegisterIn, uid: int = Depends(auth.current_person)):
+    return auth.upgrade_guest(uid, body.username, body.password, body.full_name, body.email)
+
+
+@app.post("/api/auth/recovery-code")
+def new_recovery_code(body: PasswordOnly, uid: int = Depends(auth.current_person)):
+    return auth.regenerate_code(uid, body.password or "")
+
+
+@app.post("/api/auth/logout-all")
+def logout_all(uid: int = Depends(auth.current_person)):
+    return auth.logout_all(uid)
+
+
+@app.post("/api/auth/delete-account")
+def delete_account(body: PasswordOnly, uid: int = Depends(auth.current_person)):
+    return auth.delete_account(uid, body.password)
 
 
 @app.get("/api/auth/me")
-def me(uid: int = Depends(auth.current_user)):
-    with connect() as con:
-        row = con.execute("SELECT id, username, created_at FROM users WHERE id=?", (uid,)).fetchone()
-    if not row:
-        raise HTTPException(401, "Kullanıcı bulunamadı.")
-    return dict(row)
+def me(uid: int = Depends(auth.current_person)):
+    return auth.me(uid)
 
 
 # ---------- Piyasa verisi ----------
+class IpoPrefsIn(BaseModel):
+    approvals: bool | None = None
+    applications: bool | None = None
+    capital: bool | None = None
+
+
+@app.get("/api/ipo")
+async def ipo_overview(uid: int = Depends(auth.current_person)):
+    return await run_in_threadpool(ipo.overview, uid)
+
+
+@app.post("/api/ipo/refresh")
+async def ipo_refresh(_: int = Depends(auth.current_user)):
+    return await run_in_threadpool(ipo.sync, True)
+
+
+@app.put("/api/ipo/prefs")
+def ipo_prefs(body: IpoPrefsIn, uid: int = Depends(auth.current_person)):
+    return ipo.set_prefs(uid, {k: v for k, v in body.model_dump().items() if v is not None})
+
+
+@app.get("/api/data-status")
+def data_status():
+    """Veri kaynağının (Yahoo Finance) durumu: arayüzdeki "veri kaynağı yoğun" bandı için."""
+    return yahoo.status()
+
+
 @app.get("/api/markets")
 def markets():
     return {"names": market.MARKET_NAMES, "catalog": market.CATALOG,
@@ -205,8 +334,8 @@ async def compare(symbols: str, period: str = "1y", _: int = Depends(auth.curren
         for s in syms:
             df = market.to_frame(market.history(s, period, "1d"))
             c = df["close"]
-            c.index = c.index.normalize()
-            series[s] = c[~c.index.duplicated()]
+            c.index = market.local_days(c.index)
+            series[s] = c[~c.index.duplicated(keep="last")]
             base = float(c.iloc[0])
             out.append({"symbol": s, "name": market.NAME_BY_SYMBOL.get(s, s),
                         "points": [{"time": int(t), "value": round((float(v) / base - 1) * 100, 3)}
@@ -220,13 +349,180 @@ async def compare(symbols: str, period: str = "1y", _: int = Depends(auth.curren
     return await run_in_threadpool(work)
 
 
+
+# ---------- Tahmin günlüğü, sinyal sicili, ekonomik olay etkisi ----------
+class WatchIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+    on: bool = True
+
+
+@app.get("/api/predict-journal")
+def predict_journal(uid: int = Depends(auth.current_person)):
+    return predlog.journal(uid)
+
+
+@app.post("/api/predict-journal/watch")
+def predict_watch(body: WatchIn, uid: int = Depends(auth.current_person)):
+    return predlog.set_watch(uid, body.symbol, body.on)
+
+
+@app.get("/api/signals/{symbol}")
+async def signal_track(symbol: str, _: int = Depends(auth.current_user)):
+    return await run_in_threadpool(signals.track, symbol)
+
+
+@app.get("/api/macro/impact")
+async def macro_impact(_: int = Depends(auth.current_user)):
+    return await run_in_threadpool(macro.impact)
+
+
+# ---------- Düzenli alım planları ----------
+class DcaIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+    amount: float = Field(gt=0, le=10_000_000)
+    freq: str = "monthly"
+    day: int = Field(ge=0, le=28)
+
+
+@app.get("/api/dca")
+async def dca_list(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(dca.list_plans, uid)
+
+
+@app.post("/api/dca")
+async def dca_create(body: DcaIn, uid: int = Depends(auth.current_user)):
+    res = await run_in_threadpool(dca.create, uid, body.symbol, body.amount, body.freq, body.day)
+    await run_in_threadpool(dca.run_due, uid)  # bugün plan günüyse ve piyasa açıksa hemen uygulanır
+    return res
+
+
+@app.post("/api/dca/{pid}/toggle")
+def dca_toggle(pid: int, uid: int = Depends(auth.current_user)):
+    return dca.toggle(uid, pid)
+
+
+@app.delete("/api/dca/{pid}")
+def dca_delete(pid: int, uid: int = Depends(auth.current_user)):
+    dca.delete(uid, pid)
+    return {"ok": True}
+
+
+@app.get("/api/dca/simulate")
+async def dca_simulate(symbol: str, amount: float = 2000, years: int = 3, freq: str = "monthly", _: int = Depends(auth.current_user)):
+    if not 0 < amount <= 10_000_000:
+        raise HTTPException(400, "Geçersiz tutar.")
+    return await run_in_threadpool(dca.simulate, symbol, amount, years, freq)
+
+
+# ---------- Bilanço takvimi ----------
+@app.get("/api/earnings")
+async def earnings_calendar(uid: int = Depends(auth.current_person)):
+    return await run_in_threadpool(earnings.calendar, uid)
+
+
+# ---------- Vergi hesaplayıcı (ABD hisseleri) ----------
+class TaxSettingsIn(BaseModel):
+    brackets: list[list[float | None]] = Field(min_length=1, max_length=10)
+    exemption: float = Field(default=0, ge=0, le=1e9)
+
+
+@app.get("/api/tax/{year}")
+async def tax_report(year: int, uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(tax.report, uid, year)
+
+
+@app.put("/api/tax/settings")
+def tax_settings(body: TaxSettingsIn, uid: int = Depends(auth.current_user)):
+    return tax.save_settings(uid, body.brackets, body.exemption)
+
+
+# ---------- Telefondan erişim (yerel ağ) ----------
+class LanIn(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/lan")
+def lan_status(request: Request, _: int = Depends(auth.current_person)):
+    st = lan.status()
+    st["local"] = not lan.is_lan_request(request.scope)
+    if st["url"] and st["local"]:
+        st["qr"] = lan.qr_svg(st["url"])
+    else:
+        st["url"] = None  # eşleştirme bağlantısı yalnızca bilgisayarın kendisinde gösterilir
+    return st
+
+
+@app.post("/api/lan")
+async def lan_toggle(body: LanIn, request: Request, _: int = Depends(auth.current_person)):
+    if lan.is_lan_request(request.scope):
+        raise HTTPException(403, "Telefondan erişim yalnızca bilgisayardan açılıp kapatılabilir.")
+    await run_in_threadpool(lan.start if body.enabled else lan.stop, *( [app] if body.enabled else []))
+    return lan_status(request)
+
+
+# ---------- Çoklu portföy ----------
+class PortfolioIn(BaseModel):
+    name: str = Field(min_length=1, max_length=30)
+    initial: float = Field(default=100_000, ge=1_000, le=100_000_000)
+
+
+class RenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=30)
+
+
+@app.get("/api/portfolios")
+async def portfolio_list(stats: bool = False, uid: int = Depends(auth.current_person)):
+    return await run_in_threadpool(portfolios.list_all, uid, stats)
+
+
+@app.get("/api/portfolios/compare")
+async def portfolio_compare(uid: int = Depends(auth.current_person)):
+    return await run_in_threadpool(portfolios.compare, uid)
+
+
+@app.post("/api/portfolios")
+def portfolio_create(body: PortfolioIn, uid: int = Depends(auth.current_person)):
+    return portfolios.create(uid, body.name, body.initial)
+
+
+@app.patch("/api/portfolios/{pid}")
+def portfolio_rename(pid: int, body: RenameIn, uid: int = Depends(auth.current_person)):
+    return portfolios.rename(uid, pid, body.name)
+
+
+@app.delete("/api/portfolios/{pid}")
+def portfolio_delete(pid: int, uid: int = Depends(auth.current_person)):
+    return portfolios.delete(uid, pid)
+
 # ---------- Yapay zekâ: tahmin ve asistan ----------
 @app.get("/api/predict/{symbol}")
-async def predict(symbol: str, period: str = "2y", _: int = Depends(auth.current_user)):
+async def predict(symbol: str, period: str = "2y", uid: int = Depends(auth.current_person)):
     def work():
         df = market.to_frame(market.history(symbol.upper(), period, "1d"))
         try:
-            return ml.predict(df)
+            res = ml.predict(df)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        try:
+            predlog.record(uid, symbol, res)  # tahmin günlüğüne yazılır, hedef gün kapanınca sonuçlandırılır
+        except Exception:
+            applog.task_error("predlog.record")
+        return res
+
+    return await run_in_threadpool(work)
+
+
+@app.get("/api/predict/{symbol}/scorecard")
+async def predict_scorecard(symbol: str, period: str = "2y", _: int = Depends(auth.current_user)):
+    """Model başarı karnesi: son ~6 ayda ileriye yürüyen testle ölçülen gerçek tahmin isabeti."""
+    if period not in ("2y", "5y"):
+        period = "2y"
+
+    def work():
+        sym = symbol.upper()
+        df = market.to_frame(market.history(sym, period, "1d"))
+        try:
+            return ml.scorecard(df, (sym, period, int(df["time"].iloc[-1]) // 86400))
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -234,12 +530,12 @@ async def predict(symbol: str, period: str = "2y", _: int = Depends(auth.current
 
 
 @app.get("/api/assistant/status")
-def assistant_status(_: int = Depends(auth.current_user)):
+def assistant_status(_: int = Depends(auth.current_person)):
     return assistant.status()
 
 
 @app.post("/api/assistant/chat")
-async def chat(body: ChatIn, _: int = Depends(auth.current_user)):
+async def chat(body: ChatIn, _: int = Depends(auth.current_person)):
     def work():
         context: dict = {}
         if body.symbol:
@@ -269,13 +565,13 @@ async def chat(body: ChatIn, _: int = Depends(auth.current_user)):
 # ---------- Arayüz tercihleri (karşılaştırma listesi, sekmeler, tarama vb.) ----------
 # Tarayıcı deposu adres/porta bağlı olduğundan tercihler kullanıcı bazında veritabanında da saklanır.
 @app.get("/api/prefs")
-def get_prefs(uid: int = Depends(auth.current_user)):
+def get_prefs(uid: int = Depends(auth.current_person)):
     with connect() as con:
         return {r["key"]: r["value"] for r in con.execute("SELECT key, value FROM user_prefs WHERE user_id=?", (uid,))}
 
 
 @app.put("/api/prefs")
-def put_prefs(body: dict[str, str | None], uid: int = Depends(auth.current_user)):
+def put_prefs(body: dict[str, str | None], uid: int = Depends(auth.current_person)):
     with connect() as con:
         for k, v in list(body.items())[:50]:
             if not k.startswith("finanaliz_") or k in ("finanaliz_token", "finanaliz_user"):
@@ -288,12 +584,12 @@ def put_prefs(body: dict[str, str | None], uid: int = Depends(auth.current_user)
 
 
 @app.get("/api/settings")
-def get_settings(_: int = Depends(auth.current_user)):
+def get_settings(_: int = Depends(auth.current_person)):
     return assistant.status()
 
 
 @app.put("/api/settings")
-def put_settings(body: SettingsIn, _: int = Depends(auth.current_user)):
+def put_settings(body: SettingsIn, _: int = Depends(auth.current_person)):
     assistant.save_settings(body.model_dump())
     return assistant.status()
 
@@ -318,7 +614,7 @@ async def run_backtest(body: BacktestIn, _: int = Depends(auth.current_user)):
 
 # ---------- İzleme listesi ----------
 @app.get("/api/watchlist")
-async def get_watchlist(fresh: bool = False, uid: int = Depends(auth.current_user)):
+async def get_watchlist(fresh: bool = False, uid: int = Depends(auth.current_person)):
     with connect() as con:
         syms = [r["symbol"] for r in con.execute("SELECT symbol FROM watchlist WHERE user_id=? ORDER BY id", (uid,))]
     if fresh and syms:
@@ -327,14 +623,14 @@ async def get_watchlist(fresh: bool = False, uid: int = Depends(auth.current_use
 
 
 @app.post("/api/watchlist")
-def add_watch(item: WatchItem, uid: int = Depends(auth.current_user)):
+def add_watch(item: WatchItem, uid: int = Depends(auth.current_person)):
     with connect() as con:
         con.execute("INSERT OR IGNORE INTO watchlist (user_id, symbol) VALUES (?, ?)", (uid, item.symbol.upper()))
     return {"ok": True}
 
 
 @app.delete("/api/watchlist/{symbol}")
-def del_watch(symbol: str, uid: int = Depends(auth.current_user)):
+def del_watch(symbol: str, uid: int = Depends(auth.current_person)):
     with connect() as con:
         con.execute("DELETE FROM watchlist WHERE user_id=? AND symbol=?", (uid, symbol.upper()))
     return {"ok": True}
@@ -401,6 +697,81 @@ async def portfolio_dividends(uid: int = Depends(auth.current_user)):
 @app.get("/api/portfolio/advisor")
 async def portfolio_advisor(uid: int = Depends(auth.current_user)):
     return await run_in_threadpool(portfolio.advisor, uid)
+
+
+class ProtectIn(BaseModel):
+    symbol: str
+    target: float | None = Field(default=None, gt=0)
+    stop: float | None = Field(default=None, gt=0)
+    mode: str = "order"
+
+
+@app.get("/api/portfolio/protection/{symbol}")
+def get_protection(symbol: str, uid: int = Depends(auth.current_user)):
+    return wellness.protection(uid, symbol)
+
+
+@app.post("/api/portfolio/protection")
+async def set_protection(body: ProtectIn, uid: int = Depends(auth.current_user)):
+    res = await run_in_threadpool(wellness.set_protection, uid, body.symbol, body.target, body.stop, body.mode)
+    await run_in_threadpool(orders.check, uid)
+    return res
+
+
+@app.get("/api/portfolio/health")
+async def portfolio_health(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(wellness.health, uid)
+
+
+class GoalIn(BaseModel):
+    target: float = Field(gt=0, le=1e12)
+    years: float = Field(ge=0.25, le=50)
+    monthly: float | None = Field(default=None, ge=0, le=1e10)
+    start: float | None = Field(default=None, ge=0, le=1e12)
+    profile: str = "dengeli"
+
+
+@app.post("/api/planner/goal")
+async def planner_goal(body: GoalIn, uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(planner.goal, uid, body.target, body.years, body.monthly, body.start, body.profile)
+
+
+@app.get("/api/planner/start")
+async def planner_start(uid: int = Depends(auth.current_user)):
+    return {"equity": await run_in_threadpool(planner.current_equity, uid), "profiles": [{"key": k, **v} for k, v in planner.PROFILES.items()]}
+
+
+@app.get("/api/portfolio/real")
+async def portfolio_real(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(planner.real_pnl, uid)
+
+
+class ClientErrorIn(BaseModel):
+    message: str = Field(max_length=2000)
+    source: str | None = Field(default=None, max_length=500)
+    stack: str | None = Field(default=None, max_length=8000)
+    path: str | None = Field(default=None, max_length=500)
+
+
+@app.post("/api/client-error")
+def client_error(body: ClientErrorIn):
+    """Arayüzde oluşan hataları hata kaydına yazar (oturum gerekmez; hız sınırlıdır)."""
+    return {"ok": applog.client_error(body.message, body.source, body.stack, body.path)}
+
+
+@app.get("/api/logs")
+def get_logs(lines: int = 300, _: int = Depends(auth.current_user)):
+    return applog.tail(max(20, min(lines, 2000)))
+
+
+@app.get("/api/portfolio/risks")
+async def portfolio_risks(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(wellness.risk_warnings, uid)
+
+
+@app.get("/api/portfolio/dividend-calendar")
+async def dividend_calendar(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(wellness.dividend_calendar, uid)
 
 
 @app.get("/api/portfolio/targets")
@@ -479,23 +850,23 @@ class ReadIn(BaseModel):
 
 
 @app.get("/api/notifications")
-def get_notifications(uid: int = Depends(auth.current_user)):
+def get_notifications(uid: int = Depends(auth.current_person)):
     return notifications.recent(uid)
 
 
 @app.get("/api/notifications/since")
-def notifications_since(last_id: int = 0, uid: int = Depends(auth.current_user)):
+def notifications_since(last_id: int = 0, uid: int = Depends(auth.current_person)):
     return notifications.since(uid, last_id)
 
 
 @app.post("/api/notifications/read")
-def read_notifications(body: ReadIn, uid: int = Depends(auth.current_user)):
+def read_notifications(body: ReadIn, uid: int = Depends(auth.current_person)):
     notifications.mark_read(uid, body.ids)
     return {"ok": True}
 
 
 @app.delete("/api/notifications")
-def clear_notifications(uid: int = Depends(auth.current_user)):
+def clear_notifications(uid: int = Depends(auth.current_person)):
     notifications.clear(uid)
     return {"ok": True}
 
@@ -806,24 +1177,24 @@ class PredictIn(BaseModel):
 
 
 @app.get("/api/academy")
-def get_academy(uid: int = Depends(auth.current_user)):
+def get_academy(uid: int = Depends(auth.current_person)):
     return academy.lessons(uid)
 
 
 @app.post("/api/academy/{lesson_id}/submit")
-def submit_academy(lesson_id: str, body: QuizIn, uid: int = Depends(auth.current_user)):
+def submit_academy(lesson_id: str, body: QuizIn, uid: int = Depends(auth.current_person)):
     res = academy.submit_quiz(uid, lesson_id, body.answers)
     insights.badges(uid)
     return res
 
 
 @app.get("/api/game")
-async def get_game(uid: int = Depends(auth.current_user)):
+async def get_game(uid: int = Depends(auth.current_person)):
     return await run_in_threadpool(academy.game_state, uid)
 
 
 @app.post("/api/game/predict")
-async def game_predict(body: PredictIn, uid: int = Depends(auth.current_user)):
+async def game_predict(body: PredictIn, uid: int = Depends(auth.current_person)):
     await run_in_threadpool(academy.predict, uid, body.symbol, body.direction)
     return {"ok": True}
 
@@ -852,14 +1223,14 @@ def _notifier():
 
 
 @app.get("/api/desktop/notify-settings")
-def get_notify_settings(_: int = Depends(auth.current_user)):
+def get_notify_settings(_: int = Depends(auth.current_person)):
     import desktop_notify
     n = _notifier()
     return {**desktop_notify.get_settings(), "available": n.available, "kind_labels": desktop_notify.KIND_LABELS}
 
 
 @app.put("/api/desktop/notify-settings")
-def put_notify_settings(body: NotifySettingsIn, _: int = Depends(auth.current_user)):
+def put_notify_settings(body: NotifySettingsIn, _: int = Depends(auth.current_person)):
     import desktop_notify
     n = _notifier()
     data = body.model_dump()
@@ -872,7 +1243,7 @@ def put_notify_settings(body: NotifySettingsIn, _: int = Depends(auth.current_us
 
 
 @app.post("/api/desktop/notify-test")
-def notify_test(_: int = Depends(auth.current_user)):
+def notify_test(_: int = Depends(auth.current_person)):
     n = _notifier()
     if not n.show("🔔 Test bildirimi: THYAO", "Masaüstü bildirimleri çalışıyor. \"Grafiği aç\" ile hissenin grafiğine gidebilirsiniz.",
                   "alert", "/analiz?s=THYAO.IS"):
@@ -912,14 +1283,14 @@ class ProfileIn(BaseModel):
 
 class PasswordIn(BaseModel):
     current: str
-    new: str = Field(min_length=6)
+    new: str
 
 
 PROFILE_FIELDS = ["full_name", "email", "phone", "city", "risk_profile", "experience", "bio"]
 
 
 @app.get("/api/profile")
-def get_profile(uid: int = Depends(auth.current_user)):
+def get_profile(uid: int = Depends(auth.current_person)):
     with connect() as con:
         u = dict(con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
         stats = {
@@ -927,12 +1298,15 @@ def get_profile(uid: int = Depends(auth.current_user)):
             "alerts": con.execute("SELECT COUNT(*) FROM alerts WHERE user_id=?", (uid,)).fetchone()[0],
             "favorites": con.execute("SELECT COUNT(*) FROM watchlist WHERE user_id=?", (uid,)).fetchone()[0],
         }
-    u.pop("password_hash", None)
+    u["has_recovery"] = bool(u.get("recovery_hash"))
+    for k in ("password_hash", "recovery_hash", "failed_attempts", "locked_until", "token_version"):
+        u.pop(k, None)
+    u["is_guest"] = bool(u.get("is_guest"))
     return {**u, "stats": stats}
 
 
 @app.put("/api/profile")
-def put_profile(body: ProfileIn, uid: int = Depends(auth.current_user)):
+def put_profile(body: ProfileIn, uid: int = Depends(auth.current_person)):
     data = body.model_dump()
     with connect() as con:
         con.execute(f"UPDATE users SET {', '.join(f'{k}=?' for k in PROFILE_FIELDS)} WHERE id=?",
@@ -941,13 +1315,8 @@ def put_profile(body: ProfileIn, uid: int = Depends(auth.current_user)):
 
 
 @app.post("/api/profile/password")
-def change_password(body: PasswordIn, uid: int = Depends(auth.current_user)):
-    with connect() as con:
-        row = con.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()
-        if not auth.verify_password(body.current, row["password_hash"]):
-            raise HTTPException(400, "Mevcut şifre hatalı.")
-        con.execute("UPDATE users SET password_hash=? WHERE id=?", (auth.hash_password(body.new), uid))
-    return {"ok": True}
+def change_password(body: PasswordIn, uid: int = Depends(auth.current_person)):
+    return auth.change_password(uid, body.current, body.new)
 
 
 @app.delete("/api/portfolio/transactions/{tx_id}")
@@ -981,13 +1350,13 @@ def del_position(symbol: str, uid: int = Depends(auth.current_user)):
 
 # ---------- Fiyat alarmları ----------
 @app.get("/api/alerts")
-def get_alerts(uid: int = Depends(auth.current_user)):
+def get_alerts(uid: int = Depends(auth.current_person)):
     with connect() as con:
         return rows(con.execute("SELECT * FROM alerts WHERE user_id=? ORDER BY triggered, id DESC", (uid,)))
 
 
 @app.post("/api/alerts")
-def add_alert(a: AlertIn, uid: int = Depends(auth.current_user)):
+def add_alert(a: AlertIn, uid: int = Depends(auth.current_person)):
     if a.condition not in alerts.CONDITIONS:
         raise HTTPException(400, "Bilinmeyen alarm koşulu.")
     if alerts.CONDITIONS[a.condition][1] and a.target is None:
@@ -999,7 +1368,7 @@ def add_alert(a: AlertIn, uid: int = Depends(auth.current_user)):
 
 
 @app.delete("/api/alerts/{alert_id}")
-def del_alert(alert_id: int, uid: int = Depends(auth.current_user)):
+def del_alert(alert_id: int, uid: int = Depends(auth.current_person)):
     with connect() as con:
         con.execute("DELETE FROM alerts WHERE id=? AND user_id=?", (alert_id, uid))
     return {"ok": True}
@@ -1016,7 +1385,7 @@ def alert_conditions():
 
 
 @app.post("/api/alerts/check")
-async def check_alerts(uid: int = Depends(auth.current_user)):
+async def check_alerts(uid: int = Depends(auth.current_person)):
     return await run_in_threadpool(check_alerts_for, uid)
 
 
@@ -1026,9 +1395,9 @@ class TelegramTest(BaseModel):
 
 
 @app.post("/api/telegram/test")
-def telegram_test(body: TelegramTest, _: int = Depends(auth.current_user)):
+def telegram_test(body: TelegramTest, _: int = Depends(auth.current_person)):
     token, chat = alerts.telegram_config()
-    ok, msg = alerts.send_telegram("✅ FinAnaliz Telegram bağlantısı çalışıyor.", body.token or token, body.chat_id or chat)
+    ok, msg = alerts.send_telegram("✅ TradeMetrix Telegram bağlantısı çalışıyor.", body.token or token, body.chat_id or chat)
     if not ok:
         raise HTTPException(400, msg)
     return {"ok": True, "message": msg}
@@ -1036,7 +1405,7 @@ def telegram_test(body: TelegramTest, _: int = Depends(auth.current_user)):
 
 # ---------- KAP, temel analiz, temettü ----------
 @app.get("/api/kap")
-async def kap_list(symbol: str | None = None, days: int = 7, scope: str = "all", uid: int = Depends(auth.current_user)):
+async def kap_list(symbol: str | None = None, days: int = 7, scope: str = "all", uid: int = Depends(auth.current_person)):
     def work():
         if symbol:
             return kap.for_codes([symbol], days)
@@ -1063,6 +1432,21 @@ async def get_fundamentals(symbol: str, _: int = Depends(auth.current_user)):
 @app.get("/api/fundamentals/{symbol}/peers")
 async def get_peers(symbol: str, _: int = Depends(auth.current_user)):
     return await run_in_threadpool(fundamentals.peers, symbol)
+
+
+@app.get("/api/research/{symbol}/digest")
+async def research_digest(symbol: str, _: int = Depends(auth.current_user)):
+    return await run_in_threadpool(research.digest, symbol)
+
+
+@app.get("/api/research/{symbol}/similar")
+async def research_similar(symbol: str, _: int = Depends(auth.current_user)):
+    return await run_in_threadpool(research.similar, symbol)
+
+
+@app.get("/api/research/{symbol}/events")
+async def research_events(symbol: str, _: int = Depends(auth.current_user)):
+    return await run_in_threadpool(research.events, symbol)
 
 
 @app.get("/api/dividends/history/{symbol}")
@@ -1097,6 +1481,30 @@ def bulletin_by_day(day: str, _: int = Depends(auth.current_user)):
 
 
 # ---------- Tarama, haberler, ekonomik takvim ----------
+@app.get("/api/stock-card/{symbol}")
+async def stock_card(symbol: str, uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(stockcard.card, uid, symbol)
+
+
+@app.get("/api/today")
+async def today_summary(uid: int = Depends(auth.current_user)):
+    return await run_in_threadpool(today.summary, uid)
+
+
+@app.get("/api/heatmap/{key}")
+async def heatmap(key: str, _: int = Depends(auth.current_user)):
+    """Isı haritası: tüm hisselerin sektörü, piyasa değeri (kutu büyüklüğü) ve değişimleri."""
+    if key not in universe.UNIVERSE:
+        raise HTTPException(404, "Bilinmeyen piyasa.")
+    data = await run_in_threadpool(universe.all_quotes, key)
+    meta = {a["symbol"]: a for a in universe.UNIVERSE[key]}
+    tiles = [{"symbol": q["symbol"], "name": q["name"], "sector": meta.get(q["symbol"], {}).get("sector") or "Diğer",
+              "mcap": meta.get(q["symbol"], {}).get("mcap"),
+              "price": q["price"], "change_pct": q["change_pct"], "change_1w": q["change_1w"], "change_1m": q["change_1m"],
+              "change_ytd": q["change_ytd"]} for q in data["quotes"] if q.get("price") is not None]
+    return {"tiles": tiles, "fetched_at": data["fetched_at"], "refreshing": data["refreshing"]}
+
+
 @app.get("/api/screener")
 async def run_screener(markets: str = "bist,us,crypto,fx", scope: str = "featured", force: bool = False,
                        _: int = Depends(auth.current_user)):
@@ -1218,8 +1626,10 @@ if DIST.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):
-        f = DIST / full_path
-        if full_path and f.is_file():
+        # Yol, arayüz klasörünün dışına çıkamaz ("../", mutlak yol vb. ile veritabanı/anahtar dosyası okunamaz)
+        root = DIST.resolve()
+        f = (DIST / full_path).resolve() if full_path else root
+        if full_path and f.is_file() and (root == f or root in f.parents):
             return FileResponse(f)
         # index.html önbelleğe alınmaz; böylece uygulama güncellendiğinde yeni arayüz hemen yüklenir
         return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})

@@ -19,22 +19,22 @@ def export_user(uid: int) -> dict:
     for items in data.values():
         for r in items:
             r.pop("user_id", None)
-    return {"app": "FinAnaliz", "version": VERSION, "created_at": datetime.now().isoformat(timespec="seconds"),
+    return {"app": "TradeMetrix", "version": VERSION, "created_at": datetime.now().isoformat(timespec="seconds"),
             "username": user["username"], "profile": {k: user.get(k) for k in PROFILE}, "data": data}
 
 
 def save_file(uid: int) -> dict:
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     payload = export_user(uid)
-    path = EXPORT_DIR / f"FinAnaliz_Yedek_{payload['username']}_{datetime.now():%Y%m%d_%H%M%S}.json"
+    path = EXPORT_DIR / f"TradeMetrix_Yedek_{payload['username']}_{datetime.now():%Y%m%d_%H%M%S}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     counts = {t: len(v) for t, v in payload["data"].items()}
     return {"path": str(path), "name": path.name, "folder": str(path.parent), "counts": counts}
 
 
 def restore(uid: int, payload: dict) -> dict:
-    if payload.get("app") != "FinAnaliz" or "data" not in payload:
-        raise HTTPException(400, "Bu dosya bir FinAnaliz yedeği değil.")
+    if payload.get("app") not in ("TradeMetrix", "FinAnaliz") or "data" not in payload:  # eski adla alınan yedekler de geçerli
+        raise HTTPException(400, "Bu dosya bir TradeMetrix yedeği değil.")
     with connect() as con:
         for t in TABLES:
             con.execute(f"DELETE FROM {t} WHERE user_id=?", (uid,))

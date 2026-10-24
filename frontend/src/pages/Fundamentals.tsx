@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, fmtPct, fmtPrice } from '../api'
+import { api, fmtBig, fmtPct, fmtPrice } from '../api'
 import { Disclaimer, ErrorBox, Loading, SymbolPicker } from '../components/common'
+import Term from '../components/Term'
+import { DigestCard, EventImpact, SimilarCard } from '../components/Research'
 
 type Ratios = Record<string, number | null>
 type Stmt = { period: string; revenue: number | null; gross_profit: number | null; operating_income: number | null; net_income: number | null }
@@ -45,12 +47,6 @@ const RATIO_GROUPS: { title: string; items: { key: string; label: string; kind: 
 
 const REC: Record<string, string> = { strong_buy: 'Güçlü Al', buy: 'Al', hold: 'Tut', underperform: 'Endeksin altında', sell: 'Sat', none: '—' }
 
-export function fmtBig(v: number | null | undefined, ccy = '') {
-  if (v === null || v === undefined) return '—'
-  const a = Math.abs(v)
-  const f = (x: number, s: string) => `${x.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${s}${ccy ? ' ' + ccy : ''}`
-  return a >= 1e12 ? f(v / 1e12, 'Tr') : a >= 1e9 ? f(v / 1e9, 'Mr') : a >= 1e6 ? f(v / 1e6, 'Mn') : f(v, '')
-}
 const fmtRatio = (v: number | null | undefined, kind: 'x' | 'pct' | 'num') =>
   v === null || v === undefined ? '—' : kind === 'pct' ? fmtPct(v, false) : kind === 'x' ? `${v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}×` : v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
 
@@ -117,6 +113,8 @@ export default function Fundamentals() {
             {data.fx_applied && <div className="info-box small mt">Şirket finansallarını {data.financial_currency} cinsinden raporluyor; oranlar güncel kur ({fmtPrice(data.fx_applied)}) ile {data.currency}'ye çevrilerek hesaplandı.</div>}
           </div>
 
+          <DigestCard symbol={data.symbol} />
+
           <div className="grid4">
             {Object.entries(data.scores).map(([k, v]) => (
               <div key={k} className="card kpi">
@@ -135,7 +133,7 @@ export default function Fundamentals() {
                   <tbody>
                     {g.items.map(it => (
                       <tr key={it.key} title={it.hint}>
-                        <td>{it.label}<div className="muted small">{it.hint}</div></td>
+                        <td><Term k={it.key}>{it.label}</Term><div className="muted small">{it.hint}</div></td>
                         <td className={`r mono ${it.kind === 'pct' && (r[it.key] ?? 0) < 0 ? 'down' : ''}`}>{fmtRatio(r[it.key], it.kind)}</td>
                       </tr>
                     ))}
@@ -191,6 +189,8 @@ export default function Fundamentals() {
               </div>
             )}
           </div>
+          <SimilarCard symbol={data.symbol} onPick={s => setParams({ s })} />
+          <EventImpact symbol={data.symbol} />
           <p className="disclaimer">Veriler Yahoo Finance'ten alınır ve gecikmeli ya da eksik olabilir. Puanlar basit eşiklere dayalı bir özettir; yatırım tavsiyesi değildir.</p>
         </>
       )}

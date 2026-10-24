@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, fmtPct, session, tone, type Quote } from '../api'
 import { Sparkline } from '../components/common'
 import { LivePrice } from '../components/ui'
+import { LogoMark } from '../components/Logo'
 
 const DEFAULTS = ['XU100.IS', 'USDTRY=X', 'GRAM-ALTIN', 'BTC-USD']
 
@@ -20,7 +21,7 @@ export default function Widget() {
   if (!session.token) return <div className="widget"><p className="muted pad">Önce ana pencereden giriş yapın.</p></div>
   return (
     <div className="widget">
-      <div className="widget-head"><span><span className="logo">◆</span> FinAnaliz</span><span className="muted tiny">{t?.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+      <div className="widget-head"><span><LogoMark size={18} className="logo" bars={false} /> TradeMetrix</span><span className="muted tiny">{t?.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span></div>
       {qs.map(q => (
         <div key={q.symbol} className="widget-row">
           <div><div className="strong small">{q.symbol.replace('.IS', '').replace('-USD', '').replace('=X', '')}</div><div className="muted tiny">{q.name}</div></div>

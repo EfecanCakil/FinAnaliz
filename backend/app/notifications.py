@@ -1,11 +1,14 @@
 """Bildirim merkezi: alarmlar, gerçekleşen emirler, bot işlemleri, takaslar ve rozetler tek yerde."""
 from .db import connect, rows
 
-ICONS = {"alert": "🔔", "order": "📋", "bot": "🤖", "settlement": "💸", "kap": "📢", "badge": "🏅", "system": "ℹ️"}
+ICONS = {"alert": "🔔", "order": "📋", "bot": "🤖", "settlement": "💸", "kap": "📢", "badge": "🏅", "system": "ℹ️", "ipo": "🚀"}
 
 
 def add(uid: int, kind: str, title: str, body: str = "", link: str | None = None) -> None:
     with connect() as con:
+        sub = con.execute("SELECT parent_id, portfolio_name FROM users WHERE id=?", (uid,)).fetchone()
+        if sub and sub["parent_id"]:  # ek portföydeki olaylar kişiye, portföy adıyla bildirilir
+            uid, title = sub["parent_id"], f"[{sub['portfolio_name'] or 'Portföy'}] {title}"
         con.execute("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?,?,?,?,?)",
                     (uid, kind, title, body, link))
 

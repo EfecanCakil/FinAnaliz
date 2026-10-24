@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import date
 
-from . import academy, account, ai_tools, alerts, bots, insights, notifications, orders, portfolio
+from . import academy, account, ai_tools, alerts, applog, auth, dca, earnings, predlog, bots, ipo, insights, notifications, orders, portfolio, wellness
 from .db import connect, rows
 
 INTERVAL = 60
@@ -79,20 +79,23 @@ _counter = {"n": 0}
 
 
 def tick() -> None:
-    for step in (orders.check, bots.check, alerts.check):
+    for step in (orders.check, bots.check, alerts.check, dca.run_due):
         try:
             step(None)
         except Exception:
-            pass
+            applog.task_error(f"{step.__module__}.{step.__name__}")
     _counter["n"] += 1
     slow = [_settlements, _daily_user_tasks]
     if _counter["n"] % 10 == 1:  # yaklaşık 10 dakikada bir
-        slow += [ai_tools.smart_alerts, academy.resolve, _weekly_reports]
+        slow += [ai_tools.smart_alerts, academy.resolve, _weekly_reports, auth.cleanup_guests, wellness.notify_risks,
+                 predlog.resolve, earnings.check_kap, predlog.auto_predict]
+    if _counter["n"] % 30 == 5:  # yaklaşık 30 dakikada bir: SPK halka arz ve sermaye artırımı kontrolü
+        slow += [ipo.sync, earnings.check_periods]
     for step in slow:
         try:
             step()
         except Exception:
-            pass
+            applog.task_error(f"{step.__module__}.{step.__name__}")
 
 
 def _loop() -> None:

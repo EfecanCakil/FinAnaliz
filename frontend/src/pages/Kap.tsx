@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { ErrorBox, Loading } from '../components/common'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from '../components/StockCard'
 
 export type Disclosure = {
   id: number; time: number | null; title: string; summary: string | null; company: string; codes: string[]
@@ -23,7 +24,7 @@ export function DisclosureList({ items, compact }: { items: Disclosure[]; compac
           </div>
           <div>
             <div className="row gap wrap">
-              {d.codes.slice(0, 3).map(c => <button key={c} className="code-link" onClick={() => nav(`/analiz?s=${c}.IS`)}>{c}</button>)}
+              {d.codes.slice(0, 3).map(c => <button key={c} className="code-link" onClick={() => openStock(`${c}.IS`)}>{c}</button>)}
               {!compact && <span className="muted small">{d.company}</span>}
             </div>
             <a href={d.url} target="_blank" rel="noreferrer" className="kap-title">{d.title}</a>

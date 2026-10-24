@@ -9,6 +9,8 @@ import TradePanel from '../components/TradePanel'
 import { heikinAshi, Modal, saveChartImage } from '../components/ui'
 import Markdown from '../components/Markdown'
 import type { IChartApi } from 'lightweight-charts'
+import Term from '../components/Term'
+import { SignalTrackCard } from '../components/Records'
 
 type Signal = { name: string; value: number | null; signal: string; note: string }
 type Pattern = { time: number; key: string; name: string; direction: string; description: string; price: number }
@@ -75,6 +77,23 @@ export default function Analysis() {
   useEffect(() => { setDraw(loadDrawings(symbol)); setPending(null); setTool('none') }, [symbol])
   useEffect(() => { setMtf(null); api<MtfRow[]>(`/mtf/${encodeURIComponent(symbol)}`).then(setMtf).catch(() => setMtf([])) }, [symbol])
   const updateDraw = (d: Drawings) => { setDraw(d); saveDrawings(symbol, d) }
+
+  // Grafiğe sağ tıklayınca: o fiyata alarm kur / yatay çizgi ekle
+  const [ctx, setCtx] = useState<{ price: number; x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!ctx) return
+    const off = () => setCtx(null)
+    window.addEventListener('click', off); window.addEventListener('scroll', off, true)
+    return () => { window.removeEventListener('click', off); window.removeEventListener('scroll', off, true) }
+  }, [ctx])
+  const quickAlarm = async (cond: 'above' | 'below', price: number) => {
+    setCtx(null)
+    const target = Number(price.toPrecision(6))
+    try {
+      await api('/alerts', { body: { symbol, condition: cond, target } }); window.dispatchEvent(new Event('finanaliz:alarm-set'))
+      setMsg(`🔔 Alarm kuruldu: ${symbol.replace('.IS', '')} ${fmtPrice(target)} ${cond === 'above' ? 'üzerine çıkınca' : 'altına inince'} bildirim alacaksınız. (Alarmlarınızı Portföyüm → Favoriler & Alarmlar'da görebilirsiniz.)`)
+    } catch (e) { setMsg((e as Error).message) }
+  }
 
   const onChartClick = (time: number | null, price: number | null) => {
     if (price === null || tool === 'none') return
@@ -200,7 +219,17 @@ export default function Analysis() {
           {' '}Çizimler bu varlık için kaydedilir.</div>}
         {!error && series.length === 0 ? <Loading /> : series.length > 0 &&
           <Chart series={series} height={full ? Math.max(chartHeight, window.innerHeight - 190) : chartHeight} paneHeights={paneHeights} levels={levels} markers={markers}
-            priceLines={priceLines} onClick={onChartClick} cursor={tool !== 'none' ? 'crosshair' : undefined} onChart={setChartApi} />}
+            priceLines={priceLines} onClick={onChartClick} cursor={tool !== 'none' ? 'crosshair' : undefined} onChart={setChartApi}
+            onRightClick={(price, x, y) => price != null && price > 0 && setCtx({ price, x, y })} />}
+        {ctx && (
+          <div className="ctx-menu" style={{ left: ctx.x, top: ctx.y }} onClick={e => e.stopPropagation()}>
+            <div className="muted small">Fiyat: <b className="mono">{fmtPrice(ctx.price)}</b></div>
+            {(st?.last == null || ctx.price >= st.last) && <button onClick={() => quickAlarm('above', ctx.price)}>🔔 Fiyat buraya çıkınca haber ver</button>}
+            {(st?.last == null || ctx.price <= st.last) && <button onClick={() => quickAlarm('below', ctx.price)}>🔔 Fiyat buraya inince haber ver</button>}
+            <button onClick={() => { updateDraw({ ...draw, hlines: [...draw.hlines, ctx.price] }); setCtx(null) }}>─ Buraya yatay çizgi çiz</button>
+          </div>
+        )}
+        <div className="muted small">💡 İpucu: Grafiğe sağ tıklayarak o fiyat seviyesine hızlıca alarm kurabilirsiniz.</div>
       </div>
 
       {ana && st && (
@@ -215,7 +244,7 @@ export default function Analysis() {
               <tbody>
                 {ana.summary.signals.map(s => (
                   <tr key={s.name}>
-                    <td>{s.name}</td><td className="r mono">{fmtPrice(s.value)}</td><td className="muted">{s.note}</td>
+                    <td><Term k={s.name.startsWith('RSI') ? 'rsi' : s.name.startsWith('MACD') ? 'macd' : s.name.startsWith('Bollinger') ? 'bollinger' : s.name === 'SMA 200' ? 'sma200' : s.name === 'SMA 50' ? 'sma50' : 'sma'}>{s.name}</Term></td><td className="r mono">{fmtPrice(s.value)}</td><td className="muted">{s.note}</td>
                     <td className="r"><span className={`pill ${s.signal === 'al' ? 'up' : s.signal === 'sat' ? 'down' : ''}`}>{s.signal.toUpperCase()}</span></td>
                   </tr>
                 ))}
@@ -313,6 +342,7 @@ export default function Analysis() {
         <p className="muted small">Farklı zaman dilimlerindeki sinyallerin aynı yönü göstermesi, eğilimin daha güçlü olduğuna işaret eder.</p>
       </div>
 
+      <SignalTrackCard symbol={symbol} />
       {symbol.endsWith('.IS') && <KapCard symbol={symbol} />}
       <NewsCard symbol={symbol} />
       {insight && (

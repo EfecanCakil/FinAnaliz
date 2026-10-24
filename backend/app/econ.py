@@ -120,6 +120,11 @@ def _translate_base(title: str) -> str:
     return title + suffix
 
 
+def _classify(country, title):
+    from .macro import classify
+    return classify(country, title)
+
+
 def week_events() -> dict:
     global _cache
     with _lock:
@@ -130,7 +135,7 @@ def week_events() -> dict:
     error = None
     if raw is None:
         try:
-            req = urllib.request.Request(URL, headers={"User-Agent": "Mozilla/5.0 FinAnaliz"})
+            req = urllib.request.Request(URL, headers={"User-Agent": "Mozilla/5.0 TradeMetrix"})
             with urllib.request.urlopen(req, timeout=10) as r:
                 raw = json.loads(r.read().decode("utf-8"))
             with _lock:
@@ -150,6 +155,26 @@ def week_events() -> dict:
             "title": translate(e.get("title", "")), "title_original": e.get("title", ""),
             "impact": e.get("impact"), "impact_tr": IMPACT.get(e.get("impact"), e.get("impact")),
             "forecast": e.get("forecast") or None, "previous": e.get("previous") or None,
+            "impact_key": _classify(e.get("country"), e.get("title", "")),
         })
+    events += _tr_cpi_event(events)
     events.sort(key=lambda x: x["time"])
-    return {"events": events, "source": "ForexFactory (faireconomy.media)", "error": error}
+    return {"events": events, "source": "ForexFactory (faireconomy.media); TÜİK enflasyon takvimi", "error": error}
+
+
+def _tr_cpi_event(events: list[dict]) -> list[dict]:
+    """Kaynakta yer almayan TÜİK enflasyon açıklamasını (her ayın 3'ü, 10:00) bu haftaya denk geliyorsa ekler."""
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    out = []
+    for month_start in (today.replace(day=1), (today.replace(day=1) + timedelta(days=32)).replace(day=1)):
+        d = month_start.replace(day=3)
+        while d.weekday() >= 5:  # hafta sonuna denk gelirse ilk iş gününde açıklanır
+            d += timedelta(days=1)
+        if monday <= d < monday + timedelta(days=7) and not any(e["country"] == "TRY" and "CPI" in (e["title_original"] or "") for e in events):
+            prev = (month_start - timedelta(days=1)).strftime("%m.%Y")
+            out.append({"time": int(datetime(d.year, d.month, d.day, 10, 0).timestamp()), "country": "TRY", "country_name": "Türkiye",
+                        "title": f"TÜİK Enflasyon (TÜFE) — {prev}", "title_original": "CPI y/y", "impact": "High", "impact_tr": "Yüksek",
+                        "forecast": None, "previous": None, "impact_key": "tr_cpi"})
+    return out

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, fmtMoney, fmtPct, fmtPrice, tone } from '../api'
 import { SymbolPicker } from './common'
+import { celebrate, chime } from './fx'
 
 export type Balances = {
   t0: number; t1: number; t2: number; buying_power: number; total_cash: number
@@ -17,7 +18,7 @@ export const TAGS = ['Teknik analiz', 'Temel analiz', 'Haber / KAP', 'Temettü',
 type Mode = 'market' | 'limit' | 'stop'
 
 /** Al / Sat paneli: güncel fiyat ve tarih otomatik dolar; alım gücü ve eldeki adet kontrol edilir. */
-export default function TradePanel({ symbol: fixed, onDone, compact }: { symbol?: string; onDone?: () => void; compact?: boolean }) {
+export default function TradePanel({ symbol: fixed, onDone, compact, initialQty }: { symbol?: string; onDone?: () => void; compact?: boolean; initialQty?: number }) {
   const [symbol, setSymbol] = useState(fixed ?? '')
   const [info, setInfo] = useState<Info | null>(null)
   const [qty, setQty] = useState('')
@@ -45,7 +46,7 @@ export default function TradePanel({ symbol: fixed, onDone, compact }: { symbol?
       if (!keepPrice && i.price) setPrice(String(+i.price.toPrecision(8)))
     }).catch(e => setMsg({ ok: false, text: e.message }))
   }
-  useEffect(() => { setPriceTouched(false); setQty(''); setMsg(null); setDate(today()); loadInfo(symbol, false) }, [symbol])
+  useEffect(() => { setPriceTouched(false); setQty(initialQty ? String(initialQty) : ''); setMsg(null); setDate(today()); loadInfo(symbol, false) }, [symbol])
   // Fiyat kullanıcı değiştirmediyse 30 saniyede bir güncellenir
   useEffect(() => { const id = setInterval(() => { if (!document.hidden) loadInfo() }, 30_000); return () => clearInterval(id) }, [symbol, priceTouched])
 
@@ -79,12 +80,16 @@ export default function TradePanel({ symbol: fixed, onDone, compact }: { symbol?
       } else {
         await api('/portfolio/transactions', { body: { symbol, side, quantity: q, price: p, date: date || null, fee: f, note: note || null,
           reason: reason || null, emotion: emotion || null, tag: tag || null } })
-        setMsg({ ok: true, text: `${side === 'buy' ? 'Alış' : 'Satış'} gerçekleşti: ${q.toLocaleString('tr-TR')} adet ${symbol.replace('.IS', '')} · ${fmtMoney(side === 'buy' ? totalTry : proceedsTry, 'TRY')}` })
+        // İlk işlem bir kutlama anıdır; sonraki işlemlerde kısa bir onay sesi çalınır
+        let first = false
+        try { first = !localStorage.getItem('finanaliz_first_trade'); if (first) localStorage.setItem('finanaliz_first_trade', '1') } catch { /* yoksay */ }
+        if (first) celebrate('first-trade'); else chime('good')
+        setMsg({ ok: true, text: `${side === 'buy' ? 'Alış' : 'Satış'} gerçekleşti: ${q.toLocaleString('tr-TR')} adet ${symbol.replace('.IS', '')} · ${fmtMoney(side === 'buy' ? totalTry : proceedsTry, 'TRY')}${first ? ' 🎉 İlk işleminiz hayırlı olsun!' : ''}` })
       }
       setQty(''); setNote(''); setReason('')
       loadInfo()
       onDone?.()
-    } catch (e: any) { setMsg({ ok: false, text: e.message }) } finally { setBusy(false) }
+    } catch (e: any) { chime('bad'); setMsg({ ok: false, text: e.message }) } finally { setBusy(false) }
   }
 
   const placeStops = async () => {
@@ -166,7 +171,7 @@ export default function TradePanel({ symbol: fixed, onDone, compact }: { symbol?
         <span>Tutar: <strong className="mono">{fmtMoney(q * p, info?.currency ?? 'TRY')}</strong>{rate !== 1 && <span className="muted small"> ≈ {fmtMoney(q * p * rate, 'TRY')} (kur {fmtPrice(rate)})</span>}</span>
         <span className="muted small">{settleText}{future ? ' · ileri tarihli işlem' : ''}</span>
       </div>
-      {msg && <div className={msg.ok ? 'info-box' : 'error-box'}>{msg.text}</div>}
+      {msg && <div className={msg.ok ? 'info-box success-msg' : 'error-box shake'}>{msg.ok && <span className="check-anim">✓</span>}{msg.text}</div>}
       {mode === 'stop' ? (
         <div className="trade-actions single">
           <button type="button" className="btn sell" disabled={busy || !(q > 0 && q <= held) || !(+stopPrice > 0 || +tpPrice > 0)} onClick={placeStops}>
@@ -186,7 +191,7 @@ export default function TradePanel({ symbol: fixed, onDone, compact }: { symbol?
 }
 
 /** Tablolardaki "Al/Sat" düğmesinden açılan pencere. */
-export function TradeModal({ symbol, onClose }: { symbol: string; onClose: () => void }) {
+export function TradeModal({ symbol, onClose, initialQty, onDone }: { symbol: string; onClose: () => void; initialQty?: number; onDone?: () => void }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', k)
@@ -196,7 +201,7 @@ export function TradeModal({ symbol, onClose }: { symbol: string; onClose: () =>
     <div className="qs-backdrop" onMouseDown={onClose}>
       <div className="modal" onMouseDown={e => e.stopPropagation()}>
         <div className="row between"><h3>Al / Sat</h3><button className="btn ghost small" onClick={onClose}>✕</button></div>
-        <TradePanel symbol={symbol} compact />
+        <TradePanel symbol={symbol} compact initialQty={initialQty} onDone={onDone} />
       </div>
     </div>
   )

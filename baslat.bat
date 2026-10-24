@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title FinAnaliz - Finansal Analiz Platformu
+title TradeMetrix - Piyasa Analizi Platformu
 cd /d "%~dp0"
 
 where python >nul 2>nul || (echo Python bulunamadi. https://www.python.org adresinden Python 3.11+ kurun. & pause & exit /b 1)
@@ -21,6 +21,6 @@ if not exist "frontend\dist\index.html" (
     popd
 )
 
-echo FinAnaliz baslatiliyor...
+echo TradeMetrix baslatiliyor...
 python backend\run_desktop.py
 pause

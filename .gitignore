@@ -5,3 +5,6 @@ frontend/dist/
 Uygulama/
 .claude/
 /FinAnaliz
+tanitim/*.exe
+tanitim/build/
+tanitim/dist/

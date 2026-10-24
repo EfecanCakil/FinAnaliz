@@ -1,4 +1,8 @@
-# FinAnaliz
+# TradeMetrix
+
+<img src="backend/trademetrix_logo.png" width="96" alt="TradeMetrix logosu">
+
+> Proje adı: **Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu** (eski çalışma adı: FinAnaliz)
 
 **Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu**
 Bitirme projesi, yerel masaüstü sürümü. Mimari, ileride web sürümüne geçilebilecek şekilde istemci–sunucu olarak kuruldu.
@@ -16,7 +20,7 @@ Bitirme projesi, yerel masaüstü sürümü. Mimari, ileride web sürümüne ge�
 
 ## Çalıştırma
 
-**Uygulama (exe):** `Uygulama\FinAnaliz.exe` dosyasını açın. Python veya Node.js kurulu olması gerekmez. Uygulama kendi Windows penceresinde (WebView2) açılır. Kullanıcı verileri `%APPDATA%\FinAnaliz` klasöründe tutulur. `Uygulama` klasörü bir bütündür; exe'yi tek başına başka yere taşımayın. Masaüstüne kısayol oluşturmak için exe'ye sağ tıklayıp *Gönder → Masaüstü (kısayol oluştur)* seçeneğini kullanın.
+**Uygulama (exe):** `Uygulama\TradeMetrix.exe` dosyasını açın. Python veya Node.js kurulu olması gerekmez. Uygulama kendi Windows penceresinde (WebView2) açılır. Kullanıcı verileri `%APPDATA%\FinAnaliz` klasöründe tutulur. `Uygulama` klasörü bir bütündür; exe'yi tek başına başka yere taşımayın. Masaüstüne kısayol oluşturmak için exe'ye sağ tıklayıp *Gönder → Masaüstü (kısayol oluştur)* seçeneğini kullanın.
 
 **Kod değişikliğinden sonra exe'yi yeniden oluşturmak:** `exe_olustur.bat` dosyasını çalıştırın. Bu betik arayüzü derler, PyInstaller ile exe'yi üretir ve `Uygulama` klasörünü günceller.
 

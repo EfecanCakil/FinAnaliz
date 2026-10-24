@@ -13,20 +13,26 @@ from pathlib import Path
 
 from app.assistant import load_settings, save_settings
 
-AUMID = "FinAnaliz.Desktop"
+AUMID = "TradeMetrix.Desktop"
 KIND_LABELS = {
     "alert": "Fiyat alarmları ve YZ uyarıları", "order": "Emirler", "bot": "Strateji botları",
     "settlement": "Takaslar", "badge": "Rozetler ve tahmin oyunu", "system": "Raporlar ve sistem", "kap": "KAP bildirimleri",
+    "ipo": "Halka arz ve sermaye artırımları",
 }
 ATTRIBUTION = {"alert": "Alarm", "order": "Emir", "bot": "Strateji botu", "settlement": "Takas", "badge": "Başarı",
-               "system": "FinAnaliz", "kap": "KAP"}
-BUTTON = {"alert": "Grafiği aç", "order": "Portföyü aç", "bot": "Botları aç", "settlement": "Portföyü aç", "badge": "Karneyi aç"}
+               "system": "TradeMetrix", "kap": "KAP", "ipo": "Halka arz"}
+BUTTON = {"ipo": "Ayrıntıları aç", "alert": "Grafiği aç", "order": "Portföyü aç", "bot": "Botları aç", "settlement": "Portföyü aç", "badge": "Karneyi aç"}
 DEFAULTS = {"enabled": True, "mode": "background", "kinds": list(KIND_LABELS), "sound": True,
             "quiet": False, "quiet_start": 23, "quiet_end": 8}
 
 
 def get_settings() -> dict:
-    return {**DEFAULTS, **(load_settings().get("desktop_notify") or {})}
+    saved = load_settings().get("desktop_notify") or {}
+    cur = {**DEFAULTS, **saved}
+    # Sonradan eklenen bildirim türleri (ör. halka arz), kullanıcı kapatmadıysa açık başlar
+    known = set(saved.get("known_kinds") or ["alert", "order", "bot", "settlement", "badge", "system", "kap"])
+    cur["kinds"] = list(cur["kinds"]) + [k for k in KIND_LABELS if k not in known and k not in cur["kinds"]]
+    return cur
 
 
 def set_settings(data: dict) -> dict:
@@ -34,6 +40,7 @@ def set_settings(data: dict) -> dict:
     for k, v in data.items():
         if k in DEFAULTS and v is not None:
             cur[k] = v
+    cur["known_kinds"] = list(KIND_LABELS)
     save_settings({"desktop_notify": cur})
     return cur
 
@@ -41,7 +48,7 @@ def set_settings(data: dict) -> dict:
 def _register_aumid(icon_path: Path) -> None:
     """Bildirimlerde uygulama adı ve simgesinin görünmesi için kullanıcıya özel uygulama kimliği kaydı (HKCU)."""
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}") as k:
-        winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "FinAnaliz")
+        winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "TradeMetrix")
         winreg.SetValueEx(k, "IconUri", 0, winreg.REG_SZ, str(icon_path))
         winreg.SetValueEx(k, "IconBackgroundColor", 0, winreg.REG_SZ, "FF0D1117")
 
@@ -74,14 +81,14 @@ class DesktopNotifier:
         try:
             from windows_toasts import InteractableWindowsToaster
 
-            icon_path = data_dir / "bildirim-simgesi.png"
+            icon_path = data_dir / "bildirim-simgesi-trademetrix.png"
             data_dir.mkdir(parents=True, exist_ok=True)
             icon_image.resize((128, 128)).save(icon_path)
             try:
                 _register_aumid(icon_path)
-                self.toaster = InteractableWindowsToaster("FinAnaliz", AUMID)
+                self.toaster = InteractableWindowsToaster("TradeMetrix", AUMID)
             except Exception:
-                self.toaster = InteractableWindowsToaster("FinAnaliz")
+                self.toaster = InteractableWindowsToaster("TradeMetrix")
         except Exception:
             self.toaster = None
 
@@ -112,12 +119,12 @@ class DesktopNotifier:
 
         toast = Toast(
             text_fields=[title, body or None],
-            attribution_text=ATTRIBUTION.get(kind, "FinAnaliz"),
+            attribution_text=ATTRIBUTION.get(kind, "TradeMetrix"),
             group=kind,
             audio=ToastAudio(AudioSource.Default, silent=not s["sound"]),
             on_activated=activated,
             launch_action=f"open:{link or ''}",
-            actions=[ToastButton(BUTTON.get(kind, "Aç") if link else "FinAnaliz'i aç", f"open:{link or ''}"),
+            actions=[ToastButton(BUTTON.get(kind, "Aç") if link else "TradeMetrix'i aç", f"open:{link or ''}"),
                      ToastButton("Kapat", "dismiss")],
         )
         try:

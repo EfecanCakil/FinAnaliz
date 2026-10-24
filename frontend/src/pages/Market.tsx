@@ -6,6 +6,7 @@ import { ExportButton } from '../components/extras'
 import { useAutoRefresh } from '../refresh'
 import { TradeModal } from '../components/TradePanel'
 import { LivePrice, Treemap } from '../components/ui'
+import { openStock } from '../components/StockCard'
 
 type MarketRes = {
   key: string; name: string; quotes: Quote[]
@@ -74,7 +75,7 @@ export default function Market({ market }: { market: string }) {
     else await api('/watchlist', { body: { symbol: s } })
     setWatch(w => { const n = new Set(w); n.has(s) ? n.delete(s) : n.add(s); return n })
   }
-  const open = (s: string) => nav(`/analiz?s=${encodeURIComponent(s)}`)
+  const open = (s: string) => openStock(s)
 
   const indices = data?.quotes.filter(q => q.is_index) ?? []
   const featured = data?.quotes.filter(q => !q.is_index) ?? []
@@ -112,7 +113,8 @@ export default function Market({ market }: { market: string }) {
         </div>
         <div className="row gap">
           <span className={`status ${status.open ? 'on' : ''}`}><span className="status-dot" />{status.label}</span>
-          {updated && <span className="muted small">Güncelleme: {updated.toLocaleTimeString('tr-TR')}</span>}
+          {updated && <span className="muted small" title="Veriler Yahoo Finance'ten alınır. Borsa İstanbul fiyatları borsa kuralları gereği yaklaşık 15 dakika gecikmelidir.">
+            Güncelleme: {updated.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} · {market === 'bist' ? '~15 dk gecikmeli' : 'birkaç dk gecikmeli olabilir'}</span>}
           <button className="btn ghost" onClick={() => { load(true); if (scope === 'all') loadAll(true) }} disabled={busy}>{busy ? 'Yenileniyor…' : '↻ Yenile'}</button>
           <ExportButton label="Excel" endpoint={`/export/market/${market}`} />
         </div>

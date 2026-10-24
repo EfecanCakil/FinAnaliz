@@ -91,10 +91,27 @@ export function Sparkline({ data, width = 96, height = 30 }: { data: number[]; w
 }
 
 export function Loading({ text = 'Yükleniyor…' }: { text?: string }) {
+  // İçeriğin şeklini taklit eden parlayan iskelet: başlık, grafik/kart alanı ve satırlar
   return (
-    <div className="skeleton" aria-busy="true">
+    <div className="skeleton sk-page" aria-busy="true">
       <div className="loading-text"><span className="spinner" />{text}</div>
+      <div className="sk-grid">
+        {[0, 1, 2].map(i => <div key={i} className="sk-block"><div className="sk-line" style={{ width: '45%' }} /><div className="sk-line big" /></div>)}
+      </div>
+      <div className="sk-block tall" />
       <div className="sk-line" style={{ width: '92%' }} /><div className="sk-line" style={{ width: '78%' }} /><div className="sk-line" style={{ width: '64%' }} />
+    </div>
+  )
+}
+
+/** Boş durum: sade bir çizim, kısa açıklama ve isteğe bağlı tek tıklık yönlendirme. */
+export function EmptyState({ icon, title, text, action }: { icon: string; title: string; text?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-art"><span>{icon}</span></div>
+      <b>{title}</b>
+      {text && <p className="muted small">{text}</p>}
+      {action}
     </div>
   )
 }

@@ -14,7 +14,7 @@ import pandas as pd
 import yfinance as yf
 from fastapi import HTTPException
 
-from . import assistant, market
+from . import assistant, market, yahoo
 from .db import connect, rows
 
 FX_TO_TRY = {"USD": "USDTRY=X", "EUR": "EURTRY=X", "JPY": "JPYTRY=X"}
@@ -25,10 +25,7 @@ DEFAULT_HOLD_DAYS = 365  # tarihi girilmemiş işlemler için varsayılan elde t
 
 # ----------------------------------------------------------------------------- yardımcılar
 def _closes(symbol: str, period: str) -> pd.Series:
-    df = market.to_frame(market.history(symbol, period, "1d"))
-    s = df["close"]
-    s.index = s.index.normalize()
-    return s[~s.index.duplicated(keep="last")]
+    return market.daily_closes(symbol, period)
 
 
 def _tx_date(tx: dict, today: pd.Timestamp) -> pd.Timestamp:
@@ -167,13 +164,30 @@ _div_lock = threading.Lock()
 def _dividends(symbol: str) -> pd.Series:
     with _div_lock:
         hit = _div_cache.get(symbol)
-    if hit and time.time() - hit[0] < 12 * 3600:
+    # Boş sonuç (veri kaynağı yanıt vermediyse de olabilir) yalnızca 10 dakika saklanır, dolu sonuç 12 saat
+    if hit and time.time() - hit[0] < (12 * 3600 if len(hit[1]) else 600):
         return hit[1]
-    try:
-        s = yf.Ticker(symbol).dividends
-        s.index = pd.DatetimeIndex(s.index).tz_localize(None).normalize()
-    except Exception:
-        s = pd.Series(dtype=float)
+    s = None
+    for attempt in range(3):  # veri kaynağı eşzamanlı isteklerde ara ara hata verebiliyor
+        try:
+            with yahoo.slot():
+                s = yf.Ticker(symbol).dividends
+            if len(s) == 0 and attempt == 0:  # kaynak bazen hata yerine boş yanıt dönüyor: bir kez daha dene
+                time.sleep(0.6)
+                continue
+            s.index = pd.DatetimeIndex(s.index).tz_localize(None).normalize()
+            break
+        except yahoo.YahooBusy:
+            s = None
+            break
+        except Exception as e:
+            yahoo.fail(e)
+            s = None
+            time.sleep(0.8 * (attempt + 1))
+    if s is None or (len(s) == 0 and not isinstance(s.index, pd.DatetimeIndex)):
+        s = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        if hit and len(hit[1]):
+            return hit[1]
     with _div_lock:
         _div_cache[symbol] = (time.time(), s)
     return s
@@ -234,6 +248,7 @@ def analytics(uid: int) -> dict:
     today = pd.Timestamp(datetime.now().date())
     start = max(min(_tx_date(t, today) for t in txs), today - pd.Timedelta(days=730))
     period = "2y" if start < today - pd.Timedelta(days=360) else "1y"
+    market.prefetch(sorted({t["symbol"] for t in txs}) + list(BENCHMARKS) + list(FX_TO_TRY.values()), period)
     fx = FxRates({"USD"} | {i["currency"] for i in pos["items"]} | {market.currency_of(t["symbol"]) for t in txs}, period)
     usd = fx.series["USD"]
     index = usd.index[usd.index >= start]

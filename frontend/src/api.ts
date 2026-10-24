@@ -1,4 +1,5 @@
 // Yerel REST API ile iletişim ve ortak biçimlendirme yardımcıları.
+import { friendlyMessage } from './errors'
 
 export type Point = { time: number; value: number }
 export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number }
@@ -8,6 +9,14 @@ export type Quote = {
   change_1w?: number | null; change_1m?: number | null; change_ytd?: number | null; change_1y?: number | null
   high_52w?: number | null; low_52w?: number | null; volume?: number | null; volume_avg?: number | null
   spark: number[]
+}
+
+/** Büyük tutarları kısaltır: 1,2 Mr, 350 Mn … */
+export function fmtBig(v: number | null | undefined, ccy = '') {
+  if (v === null || v === undefined) return '—'
+  const a = Math.abs(v)
+  const f = (x: number, s: string) => `${x.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${s}${ccy ? ' ' + ccy : ''}`
+  return a >= 1e12 ? f(v / 1e12, 'Tr') : a >= 1e9 ? f(v / 1e9, 'Mr') : a >= 1e6 ? f(v / 1e6, 'Mn') : f(v, '')
 }
 
 export function fmtVolume(v: number | null | undefined) {
@@ -44,13 +53,40 @@ export function marketStatus(market: string): { open: boolean; label: string } {
 const TOKEN_KEY = 'finanaliz_token'
 const USER_KEY = 'finanaliz_user'
 
+// "Beni hatırla" seçiliyse oturum kalıcı depoda, değilse yalnızca bu pencere açıkken (sessionStorage) tutulur.
+const read = (k: string) => { try { return localStorage.getItem(k) ?? sessionStorage.getItem(k) } catch { return null } }
 export const session = {
-  get token() { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } },
-  get user() { try { return localStorage.getItem(USER_KEY) } catch { return null } },
-  set(token: string, user: string) {
-    try { localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, user) } catch { /* yoksay */ }
+  get token() { return read(TOKEN_KEY) },
+  get user() { return read(USER_KEY) },
+  get remembered() { try { return localStorage.getItem(TOKEN_KEY) !== null } catch { return true } },
+  set(token: string, user: string, remember = true) {
+    try {
+      const [keep, drop] = remember ? [localStorage, sessionStorage] : [sessionStorage, localStorage]
+      keep.setItem(TOKEN_KEY, token); keep.setItem(USER_KEY, user)
+      drop.removeItem(TOKEN_KEY); drop.removeItem(USER_KEY)
+    } catch { /* yoksay */ }
   },
-  clear() { try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY) } catch { /* yoksay */ } },
+  /** Şifre değişimi vb. sonrası yenilenen anahtarı aynı depoda günceller. */
+  update(token: string, user: string) { this.set(token, user, this.remembered) },
+  clear() {
+    try { for (const st of [localStorage, sessionStorage]) { st.removeItem(TOKEN_KEY); st.removeItem(USER_KEY) } localStorage.removeItem('finanaliz_portfolio') } catch { /* yoksay */ }
+  },
+}
+
+/** Seçili (etkin) portföy. Boşsa ana portföy kullanılır; sunucu kişiye ait olmayan kimlikleri yok sayar. */
+const PF_KEY = 'finanaliz_portfolio'
+export const activePortfolio = {
+  get(): number | null { try { const v = localStorage.getItem(PF_KEY); return v ? Number(v) : null } catch { return null } },
+  set(id: number | null) {
+    try { if (id) localStorage.setItem(PF_KEY, String(id)); else localStorage.removeItem(PF_KEY) } catch { /* yoksay */ }
+    window.dispatchEvent(new Event('finanaliz:portfolio'))
+  },
+  /** Portföy değiştirip sayfayı yeniler; karşılama ekranı bu yenilemede gösterilmez. */
+  switchTo(id: number | null, path = '/portfoy') {
+    this.set(id)
+    try { sessionStorage.setItem('tm_skip_welcome', '1') } catch { /* yoksay */ }
+    location.href = path
+  },
 }
 
 export class ApiError extends Error {
@@ -60,12 +96,19 @@ export class ApiError extends Error {
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = {}
   if (session.token) headers.Authorization = `Bearer ${session.token}`
+  const pf = activePortfolio.get()
+  if (pf) headers['X-Portfolio'] = String(pf)
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(`/api${path}`, {
-    method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    })
+  } catch {
+    throw new ApiError(0, friendlyMessage(0, ''))
+  }
   if (res.status === 401 && !path.startsWith('/auth/')) {
     session.clear()
     window.dispatchEvent(new Event('finanaliz:logout'))
@@ -77,7 +120,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
       if (typeof j.detail === 'string') msg = j.detail
       else if (Array.isArray(j.detail)) msg = 'Girilen değerleri kontrol edin.'
     } catch { /* yoksay */ }
-    throw new ApiError(res.status, msg)
+    throw new ApiError(res.status, friendlyMessage(res.status, msg))
   }
   return res.json()
 }

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, fmtPct, fmtPrice, tone, type Point } from '../api'
+import { api, fmtBig, fmtPct, fmtPrice, tone, type Point } from '../api'
 import Chart, { PALETTE, type SeriesSpec } from '../components/Chart'
 import { Disclaimer, ErrorBox, Loading, SymbolPicker } from '../components/common'
-import { fmtBig } from './Fundamentals'
 
 type CmpRes = {
   series: { symbol: string; name: string; points: Point[]; return_pct: number; volatility_pct: number }[]

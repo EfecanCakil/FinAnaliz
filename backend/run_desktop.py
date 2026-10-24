@@ -18,6 +18,8 @@ import uvicorn
 
 # --web: sunucu yerel ağdaki/sunucudaki diğer cihazlardan (tarayıcı, telefon) erişilebilir şekilde başlatılır
 HOST = "0.0.0.0" if "--web" in sys.argv else "127.0.0.1"
+if "--web" in sys.argv:
+    os.environ["FINANS_PUBLIC"] = "1"  # başka cihazlardan erişime izin ver (bkz. app.main güvenlik ara katmanı)
 PORT = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else int(os.environ.get("FINANS_PORT") or os.environ.get("PORT") or "8765")
 URL = f"http://{HOST}:{PORT}"
 
@@ -55,7 +57,7 @@ def open_window():
         subprocess.Popen([browser, f"--app={URL}", "--window-size=1440,900", f"--user-data-dir={profile}"])
     else:
         webbrowser.open(URL)
-    print(f"FinAnaliz çalışıyor: {URL}  (kapatmak için bu pencereyi kapatın veya Ctrl+C)")
+    print(f"TradeMetrix çalışıyor: {URL}  (kapatmak için bu pencereyi kapatın veya Ctrl+C)")
 
 
 if __name__ == "__main__":

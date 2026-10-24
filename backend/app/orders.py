@@ -64,6 +64,25 @@ def cancel(uid: int, oid: int) -> None:
                     (oid, uid))
 
 
+def _adjust_linked(o: dict) -> set[int]:
+    """Bir satış gerçekleşince aynı hissedeki diğer satış emirleri (ör. zarar durdur + kâr al çifti) kalan adede göre
+    küçültülür; pozisyon kapandıysa iptal edilir. Böylece biri gerçekleşince diğeri boşta kalmaz."""
+    held = portfolio.holding(o["user_id"], o["symbol"])
+    changed = set()
+    with connect() as con:
+        others = rows(con.execute("SELECT * FROM orders WHERE user_id=? AND symbol=? AND status='open' AND id<>? "
+                                  "AND type IN ('stop_loss','take_profit','limit_sell')", (o["user_id"], o["symbol"], o["id"])))
+        for x in others:
+            if held <= 1e-9:
+                con.execute("UPDATE orders SET status='cancelled', closed_at=CURRENT_TIMESTAMP, result=? WHERE id=?",
+                            (f"Pozisyon kapandığı için iptal edildi ({TYPES[o['type']][0]} gerçekleşti).", x["id"]))
+                changed.add(x["id"])
+            elif x["quantity"] > held + 1e-9:
+                con.execute("UPDATE orders SET quantity=? WHERE id=?", (held, x["id"]))
+                changed.add(x["id"])
+    return changed
+
+
 def _triggered(o: dict, price: float) -> bool:
     return {"limit_buy": price <= o["price"], "stop_loss": price <= o["price"],
             "limit_sell": price >= o["price"], "take_profit": price >= o["price"]}[o["type"]]
@@ -78,7 +97,10 @@ def check(uid: int | None = None) -> list[dict]:
     today = date.today().isoformat()
     quotes = {q["symbol"]: q for q in market.quotes(sorted({o["symbol"] for o in open_orders}))}
     done = []
+    closed: set[int] = set()  # bu turda bağlı emir olarak kapatılanlar
     for o in open_orders:
+        if o["id"] in closed:
+            continue
         if o["expires"] and o["expires"] < today:
             with connect() as con:
                 con.execute("UPDATE orders SET status='expired', closed_at=CURRENT_TIMESTAMP WHERE id=?", (o["id"],))
@@ -106,5 +128,7 @@ def check(uid: int | None = None) -> list[dict]:
                         (status, fill if status == "filled" else None, msg, o["id"]))
         title = f"{TYPES[o['type']][0]} {'gerçekleşti' if status == 'filled' else 'reddedildi'}: {o['symbol'].replace('.IS', '')}"
         notifications.add(o["user_id"], "order", title, msg, "/portfoy")
+        if status == "filled" and side == "sell":
+            closed |= _adjust_linked(o)
         done.append({**o, "status": status, "message": msg})
     return done

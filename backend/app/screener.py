@@ -59,7 +59,9 @@ def _row(symbol: str, f: pd.DataFrame | None, info: dict | None = None) -> dict 
     golden, death = _crossed(sma50, sma200, 10) if len(c) >= 210 else (False, False)
     p200_up, p200_down = _crossed(c, sma200, 5) if len(c) >= 205 else (False, False)
     macd_up, macd_down = _crossed(macd_line, macd_sig, 3)
-    info = info or market.ASSET_BY_SYMBOL.get(symbol) or universe.asset(symbol) or {}
+    uni = universe.asset(symbol) or {}
+    info = {**(info or market.ASSET_BY_SYMBOL.get(symbol) or uni)}
+    info["sector"] = uni.get("sector") or info.get("sector")  # tüm hisselerde aynı sektör adları
 
     vol_ratio = None
     if has_volume:

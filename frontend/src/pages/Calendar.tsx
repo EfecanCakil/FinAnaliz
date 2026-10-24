@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { ErrorBox, Loading } from '../components/common'
+import { impactHint, MacroImpactCard, useMacro } from '../components/Records'
 
 type Event = {
   time: number; country: string; country_name: string; title: string; title_original: string
-  impact: string; impact_tr: string; forecast: string | null; previous: string | null
+  impact: string; impact_tr: string; forecast: string | null; previous: string | null; impact_key?: string | null
 }
 
 const IMPACTS = ['High', 'Medium', 'Low', 'Holiday']
@@ -21,6 +22,7 @@ function countdown(t: number) {
 }
 
 export default function Calendar() {
+  const macro = useMacro()
   const [data, setData] = useState<{ events: Event[]; source: string; error: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [impacts, setImpacts] = useState<string[]>(['High', 'Medium'])
@@ -83,7 +85,8 @@ export default function Calendar() {
                       <td className="mono">{hhmm(e.time)}</td>
                       <td>{e.country_name}</td>
                       <td><span className={`pill ${IMPACT_CLASS[e.impact] ?? ''}`}>{e.impact_tr}</span></td>
-                      <td>{e.title}{e.title !== e.title_original && <div className="muted small">{e.title_original}</div>}</td>
+                      <td>{e.title}{e.title !== e.title_original && <div className="muted small">{e.title_original}</div>}
+                        {impactHint(macro.m, e.impact_key) && <div className="impact-hint small">⚡ {impactHint(macro.m, e.impact_key)}</div>}</td>
                       <td className="r mono">{e.forecast ?? '—'}</td>
                       <td className="r mono">{e.previous ?? '—'}</td>
                     </tr>
@@ -93,6 +96,7 @@ export default function Calendar() {
             </div>
           ))}
           {days.length === 0 && <div className="card muted">Seçilen filtrelere uygun etkinlik yok.</div>}
+          <MacroImpactCard m={macro.m} err={macro.err} />
           <p className="disclaimer">Kaynak: {data.source}. Türkiye'ye özgü TCMB ve TÜİK açıklamaları bu kaynakta yer almayabilir. Geçmiş saatteki etkinlikler soluk gösterilir.</p>
         </>
       )}

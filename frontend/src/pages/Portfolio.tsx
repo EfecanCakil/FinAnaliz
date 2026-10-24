@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, fmtMoney, fmtPct, fmtPrice, tone, type Point } from '../api'
 import Chart, { COLORS, PALETTE, type SeriesSpec } from '../components/Chart'
-import { Disclaimer, ErrorBox, Loading, Stat } from '../components/common'
+import { Disclaimer, EmptyState, ErrorBox, Loading, Stat } from '../components/common'
 import { ExportButton } from '../components/extras'
 import Markdown from '../components/Markdown'
 import TradePanel, { EMOTIONS, TAGS, TradeModal } from '../components/TradePanel'
 import { Modal } from '../components/ui'
 import { CountMoney } from '../components/fx'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from '../components/StockCard'
+import { DividendCalendar, HealthCard, RangeBar } from '../components/PortfolioPlus'
+import { RiskAlerts } from '../components/Research'
+import { DcaTab, EarningsTab, PortfolioSwitcher, TaxTab } from '../components/PortfolioTools'
 
 type Item = {
   id: string; symbol: string; name: string; currency: string; quantity: number; buy_price: number; buy_date: string | null
@@ -58,10 +62,17 @@ export default function Portfolio() {
   const [divs, setDivs] = useState<Divs | null>(null)
   const [advice, setAdvice] = useState<Advice | null>(null)
   const [targetsDraft, setTargetsDraft] = useState<Record<string, string>>({})
-  const [tab, setTab] = useState<'tx' | 'div' | 'target' | 'advice' | 'orders'>('orders')
+  type Tab = 'tx' | 'div' | 'target' | 'advice' | 'orders' | 'dca' | 'earn' | 'tax'
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>((['tx', 'div', 'target', 'advice', 'orders', 'dca', 'earn', 'tax'].includes(params.get('tab') ?? '') ? params.get('tab') : 'orders') as Tab)
   const [orders, setOrders] = useState<Order[]>([])
   const [jEdit, setJEdit] = useState<Tx | null>(null)
   const loadOrders = () => api<Order[]>('/orders').then(setOrders).catch(() => {})
+  useEffect(() => {  // hisse kartında hedef/zarar sınırı değişince tablo da güncellensin
+    const h = () => loadOrders()
+    window.addEventListener('finanaliz:orders-changed', h)
+    return () => window.removeEventListener('finanaliz:orders-changed', h)
+  }, [])
   useEffect(() => { loadOrders() }, [])
   const cancelOrder = (id: number) => api(`/orders/${id}`, { method: 'DELETE' }).then(() => { loadOrders(); load() })
   const saveJournal = async () => {
@@ -114,7 +125,8 @@ export default function Portfolio() {
     <div className="page">
       <header className="page-head">
         <div><h1>Portföy</h1><p className="muted">Varlıklarınızı ekleyin; değer, kâr/zarar, performans ve riski TL bazında takip edin</p></div>
-        <div className="row gap">
+        <div className="row gap wrap">
+          <PortfolioSwitcher />
           <button className="btn ghost" onClick={() => load(true)}>↻ Yenile</button>
           {hasItems && <ExportButton label="Excel" endpoint="/export/portfolio?fmt=xlsx" />}
           {hasItems && <ExportButton label="PDF rapor" endpoint="/export/portfolio?fmt=pdf" />}
@@ -169,7 +181,7 @@ export default function Portfolio() {
       </div>
       <ErrorBox error={error} />
       {!data && !error && <Loading />}
-      {data && data.items.length === 0 && <div className="card muted">Portföyünüzde henüz varlık yok. Yukarıdaki Al / Sat panelinden ilk alımınızı yapabilirsiniz.</div>}
+      {data && data.items.length === 0 && <div className="card"><EmptyState icon="💼" title="Portföyünüz henüz boş" text="100.000 TL sanal bakiyenizle gerçek fiyatlardan, risksiz al-sat yapabilirsiniz. Yukarıdaki Al / Sat panelinden ilk alımınızı yapın." /></div>}
       {trade && <TradeModal symbol={trade} onClose={() => { setTrade(null); load() }} />}
       {hasItems && (
         <>
@@ -266,21 +278,30 @@ export default function Portfolio() {
             </div>
           )}
 
+          <HealthCard refresh={data.items.length} />
+          <RiskAlerts refresh={data.items.length} />
           <div className="card">
             <h3>Pozisyonlar</h3>
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Varlık</th><th className="r">Miktar</th><th className="r">Ort. maliyet</th><th className="r">Güncel</th><th className="r">Günlük</th><th className="r">Değer</th><th className="r">Kâr/Zarar</th><th /></tr></thead>
+                <thead><tr><th>Varlık</th><th className="r">Miktar</th><th className="r">Ort. maliyet</th><th className="r">Güncel</th><th className="r">Günlük</th><th className="r">Değer</th><th className="r">Kâr/Zarar</th><th className="c" title="Zarar sınırı — güncel fiyat — hedef">🛡 Koruma</th><th /></tr></thead>
                 <tbody>
                   {data.items.map(i => (
                     <tr key={i.id}>
-                      <td><div className="sym">{i.symbol}</div><div className="muted small">{i.name}{i.buy_date ? ` · ${i.buy_date}` : ''}</div></td>
+                      <td className="clickable" onClick={() => openStock(i.symbol)} title="Pozisyon ayrıntıları, işlem geçmişi ve Al / Sat"><div className="sym">{i.symbol.replace('.IS', '')}</div><div className="muted small">{i.name}{i.buy_date ? ` · ${i.buy_date}` : ''}</div></td>
                       <td className="r mono">{i.quantity.toLocaleString('tr-TR')}</td>
                       <td className="r mono">{fmtPrice(i.buy_price)}</td>
                       <td className="r mono">{fmtPrice(i.price)}</td>
                       <td className={`r mono ${tone(i.day_change_pct)}`}>{fmtPct(i.day_change_pct)}</td>
                       <td className="r mono">{fmtMoney(i.value, i.currency)}</td>
                       <td className={`r mono ${tone(i.pnl)}`}>{fmtMoney(i.pnl, i.currency)}<div className="small">{fmtPct(i.pnl_pct)}</div></td>
+                      <td className="c">{(() => {
+                        const tp = orders.find(o => o.status === 'open' && o.symbol === i.symbol && o.type === 'take_profit')
+                        const sl = orders.find(o => o.status === 'open' && o.symbol === i.symbol && o.type === 'stop_loss')
+                        return tp || sl
+                          ? <div className="clickable" onClick={() => openStock(i.symbol)}><RangeBar compact stop={sl?.price ?? null} price={i.price} target={tp?.price ?? null} /></div>
+                          : <button className="btn ghost small" onClick={() => openStock(i.symbol)} title="Hedef fiyat ve zarar sınırı belirle">Belirle</button>
+                      })()}</td>
                       <td className="r nowrap"><button className="btn ghost small" onClick={() => sell(i)}>Al / Sat</button>
                         <button className="btn ghost small" onClick={() => remove(i.symbol)}>Sil</button></td>
                     </tr>
@@ -293,7 +314,7 @@ export default function Portfolio() {
         </>
       )}
 
-      {data && (data.transactions.length > 0 || orders.length > 0) && (
+      {data && (
         <div className="card">
           <div className="row between wrap gap">
             <div className="seg">
@@ -302,12 +323,18 @@ export default function Portfolio() {
               <button className={tab === 'target' ? 'active' : ''} onClick={() => setTab('target')}>🎯 Hedef Dağılım</button>
               <button className={tab === 'div' ? 'active' : ''} onClick={() => setTab('div')}>💰 Temettüler</button>
               <button className={tab === 'tx' ? 'active' : ''} onClick={() => setTab('tx')}>📜 İşlem Geçmişi ({data.transactions.length})</button>
+              <button className={tab === 'dca' ? 'active' : ''} onClick={() => setTab('dca')}>🔁 Düzenli Alım</button>
+              <button className={tab === 'earn' ? 'active' : ''} onClick={() => setTab('earn')}>📑 Bilançolar</button>
+              <button className={tab === 'tax' ? 'active' : ''} onClick={() => setTab('tax')}>🧾 Vergi (ABD)</button>
             </div>
           </div>
 
+          {tab === 'dca' && <DcaTab />}
+          {tab === 'earn' && <EarningsTab />}
+          {tab === 'tax' && <TaxTab />}
           {tab === 'orders' && (
             <div className="table-wrap mt">
-              {orders.length === 0 ? <p className="muted">Henüz emir yok. Al / Sat panelinde "Limit emir" veya "Zarar durdur / Kâr al" sekmesinden emir verebilirsiniz.</p> : (
+              {orders.length === 0 ? <EmptyState icon="📋" title="Bekleyen emir yok" text='Al / Sat panelinde "Limit emir" veya "Zarar durdur / Kâr al" sekmesinden fiyat seviyesine göre otomatik emir verebilirsiniz.' /> : (
                 <table className="table">
                   <thead><tr><th>Varlık</th><th>Emir</th><th className="r">Adet</th><th className="r">Tetik fiyatı</th><th>Durum</th><th>Geçerlilik</th><th>Sonuç</th><th /></tr></thead>
                   <tbody>{orders.map(o => (
@@ -368,6 +395,7 @@ export default function Portfolio() {
             </div>
           )}
 
+          {tab === 'div' && <div className="mt"><h3>📅 Temettü Takvimi <span className="muted small">(önümüzdeki 12 ay)</span></h3><DividendCalendar /></div>}
           {tab === 'div' && (!divs ? <Loading /> : (
             <div className="mt grid2">
               <div>

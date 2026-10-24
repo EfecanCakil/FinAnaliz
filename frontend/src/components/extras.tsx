@@ -4,7 +4,7 @@ import { Loading } from './common'
 
 type Saved = { path: string; name: string; folder: string }
 
-/** Raporu sunucuda oluşturup İndirilenler\FinAnaliz klasörüne kaydeder. */
+/** Raporu sunucuda oluşturup İndirilenler\TradeMetrix klasörüne kaydeder. */
 export function ExportButton({ label, endpoint, body, icon = '⬇' }: { label: string; endpoint: string; body?: unknown; icon?: string }) {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<Saved | null>(null)

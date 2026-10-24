@@ -114,10 +114,7 @@ def _week_bounds(d: date) -> tuple[date, date]:
 
 
 def _closes(symbol: str):
-    df = market.to_frame(market.history(symbol, "3mo", "1d"))
-    c = df["close"]
-    c.index = c.index.normalize()
-    return c[~c.index.duplicated(keep="last")]
+    return market.daily_closes(symbol, "3mo")
 
 
 def resolve() -> None:
@@ -152,7 +149,7 @@ def game_state(uid: int) -> dict:
     with connect() as con:
         mine = rows(con.execute("SELECT * FROM predictions WHERE user_id=? ORDER BY week DESC, id DESC LIMIT 60", (uid,)))
         board = rows(con.execute("SELECT u.username, COALESCE(SUM(p.points),0) AS points, SUM(p.result='correct') AS correct, "
-                                 "SUM(p.result IS NOT NULL) AS resolved FROM users u LEFT JOIN predictions p ON p.user_id=u.id "
+                                 "SUM(p.result IS NOT NULL) AS resolved FROM users u LEFT JOIN predictions p ON p.user_id=u.id WHERE u.parent_id IS NULL "
                                  "GROUP BY u.id ORDER BY points DESC LIMIT 20"))
     this_week = {p["symbol"]: p for p in mine if p["week"] == mon.isoformat()}
     qs = {q["symbol"]: q for q in market.quotes(list(GAME_SYMBOLS))}

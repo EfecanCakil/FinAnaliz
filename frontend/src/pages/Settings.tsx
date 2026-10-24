@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
+import PhoneAccessCard from '../components/PhoneAccess'
 import { REFRESH_OPTIONS, setRefreshSec, useRefreshSec } from '../refresh'
 import { ACCENTS, chime, confetti, setPrefs, usePrefs } from '../components/fx'
 
@@ -71,7 +72,7 @@ export default function Settings() {
           <input type="checkbox" checked={status?.tray_on_close ?? true} onChange={e => setTray(e.target.checked)} />
           Pencere kapatılınca sistem tepsisine küçült ve fiyat alarmlarını izlemeye devam et
         </label>
-        <p className="muted small mt">Açıkken pencereyi kapattığınızda FinAnaliz saatin yanındaki simge alanında çalışmaya devam eder,
+        <p className="muted small mt">Açıkken pencereyi kapattığınızda TradeMetrix saatin yanındaki simge alanında çalışmaya devam eder,
           alarmlarınızı dakikada bir kontrol eder ve tetiklendiğinde Windows bildirimi gösterir. Tamamen kapatmak için tepsi simgesine
           sağ tıklayıp <b>Çıkış</b>'ı seçin.</p>
       </div>
@@ -84,10 +85,12 @@ export default function Settings() {
             <button key={k} type="button" className={`accent-dot ${prefs.accent === k ? 'on' : ''}`} style={{ background: a.color }} title={a.name} onClick={() => setPrefs({ accent: k })} />
           ))}
         </div>
-        <label className="toggle-row mt"><input type="checkbox" checked={prefs.animations} onChange={e => setPrefs({ animations: e.target.checked })} />Animasyonlar ve geçiş efektleri</label>
+        <label className="toggle-row mt"><input type="checkbox" checked={prefs.animations} onChange={e => setPrefs({ animations: e.target.checked })} />Animasyonlar ve geçiş efektleri <span className="muted small">(kapatınca uygulama sade ve daha hızlı çalışır; yavaş bilgisayarlar için önerilir)</span></label>
         <label className="toggle-row"><input type="checkbox" checked={prefs.confetti} onChange={e => setPrefs({ confetti: e.target.checked })} />Rozet ve kârlı işlemlerde konfeti</label>
-        <label className="toggle-row"><input type="checkbox" checked={prefs.sound} onChange={e => { setPrefs({ sound: e.target.checked }); if (e.target.checked) setTimeout(() => chime('good'), 50) }} />Bildirim sesleri</label>
+        <label className="toggle-row"><input type="checkbox" checked={prefs.sound} onChange={e => { setPrefs({ sound: e.target.checked }); if (e.target.checked) setTimeout(() => chime('good'), 50) }} />Ses efektleri <span className="muted small">(işlem, alarm ve bildirimlerde kısa sesler)</span></label>
         <label className="toggle-row"><input type="checkbox" checked={prefs.sidebarCollapsed} onChange={e => setPrefs({ sidebarCollapsed: e.target.checked })} />Yan menüyü daralt (yalnızca simgeler)</label>
+        <label className="toggle-row"><input type="checkbox" checked={prefs.advanced} onChange={e => setPrefs({ advanced: e.target.checked })} />Gelişmiş mod (strateji testi, botlar, portföy laboratuvarı gibi ileri araçları menüde göster)</label>
+        <label className="toggle-row"><input type="checkbox" checked={prefs.tips} onChange={e => setPrefs({ tips: e.target.checked })} />Sayfaların üstünde "bu sayfa ne işe yarar?" ipuçlarını göster</label>
         <button type="button" className="btn ghost small mt" onClick={() => confetti()}>🎉 Konfetiyi dene</button>
       </div>
       <div className="card narrow">
@@ -115,9 +118,11 @@ export default function Settings() {
           {status?.telegram_configured && <button type="button" className="btn ghost" onClick={removeTelegram}>Bağlantıyı kaldır</button>}
         </div>
       </div>
+      <PhoneAccessCard />
+      <ErrorLogCard />
       <div className="card narrow">
         <h3>Hakkında</h3>
-        <p>FinAnaliz — Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu.</p>
+        <p>TradeMetrix — Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu.</p>
         <p className="muted small">Veri kaynağı: Yahoo Finance (yfinance). Veriler gecikmeli olabilir. API dokümantasyonu: <a href="/docs" target="_blank">/docs (Swagger UI)</a></p>
       </div>
     </div>
@@ -183,6 +188,39 @@ function DesktopNotifyCard() {
           <p className="muted small mt">Bildirimdeki <b>Grafiği aç</b> / <b>Portföyü aç</b> düğmesi uygulamayı öne getirip ilgili sayfayı açar. Kaçırdığınız bildirimler Windows Bildirim Merkezi'nde (Win + N) ve uygulamadaki 🔔 menüsünde durur.</p>
         </>
       )}
+    </div>
+  )
+}
+
+type Logs = { path: string; lines: string[]; errors_7d: number; size: number }
+const NL = String.fromCharCode(10)
+
+function ErrorLogCard() {
+  const [l, setL] = useState<Logs | null>(null)
+  const [open, setOpen] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const load = () => api<Logs>('/logs?lines=400').then(setL).catch(() => setL(null))
+  useEffect(() => { load() }, [])
+  const copy = async () => {
+    if (!l) return
+    try { await navigator.clipboard.writeText(l.lines.join(NL)); setMsg('Hata raporu panoya kopyalandı.') } catch { setMsg('Kopyalanamadı; aşağıdaki metni elle seçip kopyalayabilirsiniz.'); setOpen(true) }
+  }
+  if (!l) return null
+  return (
+    <div className="card narrow">
+      <h3>🩹 Hata Kaydı</h3>
+      <p className="muted small">Uygulamada oluşan hatalar bu bilgisayarda bir kayıt dosyasına yazılır (parola veya kişisel veri içermez). Bir sorun bildirirken bu raporu paylaşabilirsiniz.</p>
+      <div className="row gap wrap">
+        <span className={`pill ${l.errors_7d ? 'warn' : 'up'}`}>{l.errors_7d ? `Son 7 günde ${l.errors_7d} hata` : 'Son 7 günde hata yok'}</span>
+        <span className="muted small">{(l.size / 1024).toFixed(0)} KB · {l.path}</span>
+      </div>
+      <div className="row gap mt">
+        <button className="btn ghost" onClick={copy} disabled={!l.lines.length}>📋 Raporu kopyala</button>
+        <button className="btn ghost" onClick={() => setOpen(!open)} disabled={!l.lines.length}>{open ? 'Gizle' : 'Kaydı göster'}</button>
+        <button className="btn ghost" onClick={load}>↻ Yenile</button>
+      </div>
+      {msg && <div className="info-box small mt">{msg}</div>}
+      {open && <pre className="log-view mt">{l.lines.slice(-200).join(NL)}</pre>}
     </div>
   )
 }

@@ -13,6 +13,7 @@ DATA_DIR = Path(os.environ.get("FINANS_DATA_DIR", Path(__file__).resolve().paren
 DB_PATH = DATA_DIR / "finans.db"
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS frame_cache (symbol TEXT PRIMARY KEY, fetched_at REAL, payload TEXT);
 CREATE TABLE IF NOT EXISTS user_prefs (
     user_id INTEGER NOT NULL,
     key TEXT NOT NULL,
@@ -158,11 +159,49 @@ def init_db() -> None:
                                            "settled_notified": "INTEGER NOT NULL DEFAULT 0", "reason": "TEXT", "emotion": "TEXT",
                                            "tag": "TEXT", "review": "TEXT"})
         _add_columns(con, "users", {"full_name": "TEXT", "email": "TEXT", "phone": "TEXT", "city": "TEXT",
-                                    "risk_profile": "TEXT", "experience": "TEXT", "bio": "TEXT"})
+                                    "risk_profile": "TEXT", "experience": "TEXT", "bio": "TEXT",
+                                    # giriş güvenliği ve misafir hesapları
+                                    "is_guest": "INTEGER NOT NULL DEFAULT 0", "recovery_hash": "TEXT", "last_login": "TEXT",
+                                    "failed_attempts": "INTEGER NOT NULL DEFAULT 0", "locked_until": "REAL",
+                                    "token_version": "INTEGER NOT NULL DEFAULT 0", "prev_login": "TEXT",
+                                    # çoklu portföy: ek portföyler kişiye bağlı (parent_id) giriş yapılamayan hesaplardır
+                                    "parent_id": "INTEGER", "portfolio_name": "TEXT"})
         # Eski sürümdeki pozisyon kayıtları alış işlemlerine dönüştürülür (tek seferlik geçiş)
         con.execute("""INSERT INTO transactions (user_id, symbol, side, quantity, price, date, note)
                        SELECT user_id, symbol, 'buy', quantity, buy_price, buy_date, note FROM portfolio""")
         con.execute("DELETE FROM portfolio")
+    from . import dca, earnings, predlog  # özelliklere ait tablolar (döngüsel içe aktarımı önlemek için burada)
+    for mod in (predlog, dca, earnings):
+        mod.init()
+    _tune()
+
+
+def _tune() -> None:
+    """WAL kipi (okuma ve yazma birbirini beklemez) ve sık sorgulanan alanlara indeksler.
+    Kayıt kipi açık bir işlem içinde değiştirilemediği için ayrı bir bağlantı kullanılır."""
+    con = sqlite3.connect(DB_PATH, timeout=20, isolation_level=None)
+    con.row_factory = sqlite3.Row
+    try:
+        _tune_with(con)
+    finally:
+        con.close()
+
+
+def _tune_with(con) -> None:
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA synchronous = NORMAL")
+    tables = [r["name"] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+    for t in tables:
+        cols = {c["name"] for c in con.execute(f"PRAGMA table_info({t})")}
+        if "user_id" in cols:
+            con.execute(f"CREATE INDEX IF NOT EXISTS ix_{t}_user ON {t}(user_id)")
+    extra = {
+        "notifications": "user_id, id", "orders": "status", "alerts": "triggered", "transactions": "user_id, symbol",
+        "watchlist": "symbol", "spk_ipos": "date", "spk_capital": "date", "us_ipos": "status",
+    }
+    for t, cols in extra.items():
+        if t in tables:
+            con.execute(f"CREATE INDEX IF NOT EXISTS ix_{t}_{cols.replace(', ', '_')} ON {t}({cols})")
 
 
 def _add_columns(con, table: str, columns: dict[str, str]) -> None:
@@ -196,7 +235,8 @@ def _migrate_alerts(con) -> None:
 
 @contextmanager
 def connect():
-    con = sqlite3.connect(DB_PATH)
+    # timeout: arka plan işleri aynı anda yazarken "database is locked" hatası yerine kısa süre beklenir
+    con = sqlite3.connect(DB_PATH, timeout=20)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     try:

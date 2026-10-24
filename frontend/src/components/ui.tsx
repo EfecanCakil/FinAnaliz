@@ -3,22 +3,40 @@ import { useNavigate } from 'react-router-dom'
 import type { IChartApi } from 'lightweight-charts'
 import { api, fmtPct, fmtPrice, tone, type Candle, type Quote } from '../api'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from './StockCard'
+import { EmptyState } from './common'
+import { LogoMark } from './Logo'
 
 /* ------------------------------------------------------------------ Canlı fiyat */
 /** Değer değiştiğinde kısa süre yeşil/kırmızı yanıp sönen fiyat. */
 export function LivePrice({ value, className = '' }: { value: number | null | undefined; className?: string }) {
+  // Fiyat değişince yalnızca değişen haneler yukarı (artış) veya aşağı (düşüş) yuvarlanır; hücre kısa süre renkli parlar
   const prev = useRef(value)
-  const [flash, setFlash] = useState<'' | 'flash-up' | 'flash-down'>('')
+  const prevText = useRef(fmtPrice(value))
+  const gen = useRef(0)
+  const [state, setState] = useState<{ flash: '' | 'flash-up' | 'flash-down'; from: number; dir: 'up' | 'down' | '' }>({ flash: '', from: Infinity, dir: '' })
+  const text = fmtPrice(value)
   useEffect(() => {
     if (value != null && prev.current != null && value !== prev.current) {
-      setFlash(value > prev.current ? 'flash-up' : 'flash-down')
-      const id = setTimeout(() => setFlash(''), 1200)
-      prev.current = value
+      const old = prevText.current
+      let i = 0
+      while (i < text.length && i < old.length && text[i] === old[i]) i++
+      const up = value > prev.current
+      gen.current++
+      setState({ flash: up ? 'flash-up' : 'flash-down', from: text.length === old.length ? i : 0, dir: up ? 'up' : 'down' })
+      const id = setTimeout(() => setState(st => ({ ...st, flash: '' })), 1200)
+      prev.current = value; prevText.current = text
       return () => clearTimeout(id)
     }
-    prev.current = value
+    prev.current = value; prevText.current = text
   }, [value])
-  return <span className={`mono ${className} ${flash}`}>{fmtPrice(value)}</span>
+  return (
+    <span className={`mono live-price ${className} ${state.flash}`}>
+      {text.split('').map((ch, i) => i >= state.from && state.dir
+        ? <span key={`${i}-${gen.current}`} className={`roll-${state.dir}`}>{ch}</span>
+        : <span key={i}>{ch}</span>)}
+    </span>
+  )
 }
 
 /* ------------------------------------------------------------------ İskelet yükleyici */
@@ -47,7 +65,7 @@ export function TickerTape() {
     <div className="tape">
       <div className="tape-track">
         {[...items, ...items].map((q, i) => (
-          <span key={i} className="tape-item" onClick={() => nav(`/analiz?s=${encodeURIComponent(q.symbol)}`)}>
+          <span key={i} className="tape-item" onClick={() => openStock(q.symbol)}>
             <b>{q.name}</b> <LivePrice value={q.price} /> <span className={tone(q.change_pct)}>{(q.change_pct ?? 0) >= 0 ? '▲' : '▼'} {fmtPct(q.change_pct)}</span>
           </span>
         ))}
@@ -95,7 +113,7 @@ export function NotificationBell({ onNew }: { onNew: (n: Notif[]) => void }) {
             <div className="row gap"><button className="btn ghost small" onClick={markAll}>Tümünü okundu say</button><button className="btn ghost small" onClick={clear}>Temizle</button></div>
           </div>
           <div className="bell-list">
-            {data.items.length === 0 && <p className="muted pad">Henüz bildirim yok. Alarmlar, emirler, botlar, takaslar ve rozetler burada görünür.</p>}
+            {data.items.length === 0 && <EmptyState icon="🔕" title="Bildirim yok" text="Alarmlar, emirler, botlar, takaslar ve rozetler burada görünür." />}
             {data.items.map(n => (
               <div key={n.id} className={`bell-item ${n.read ? '' : 'unread'}`} onClick={() => go(n)}>
                 <span className="bell-icon">{n.icon}</span>
@@ -169,12 +187,12 @@ export function ShortcutHelp({ onClose }: { onClose: () => void }) {
 
 /* ------------------------------------------------------------------ Tanıtım turu */
 const TOUR = [
-  { icon: '👋', title: 'FinAnaliz\'e hoş geldiniz', text: 'Borsa İstanbul, ABD borsaları, döviz, altın ve kripto paraları tek uygulamada takip edip yapay zekâ destekli analizler yapabilirsiniz. Kısa bir tur atalım.' },
-  { icon: '◧', title: 'Piyasa Özeti', text: 'Ana ekranda endeksler, favorileriniz, günün bülteni ve öne çıkan hareketler yer alır. "Düzenle" ile kartların yerini ve görünürlüğünü değiştirebilirsiniz.' },
-  { icon: '📈', title: 'Analiz', text: 'Teknik analiz sayfasında mum grafiği, göstergeler, formasyonlar, destek/direnç, çizim araçları, temel analiz, KAP bildirimleri ve haberler bulunur.' },
-  { icon: '💼', title: '100.000 TL sanal hesap', text: 'Al / Sat paneliyle gerçek fiyatlardan sanal işlem yapın. Limit, zarar durdur ve kâr al emirleri verebilir, T0/T1/T2 takas bakiyelerini izleyebilirsiniz.' },
-  { icon: '🤖', title: 'Yapay zekâ ve otomasyon', text: 'Fiyat tahmini, grafik yorumu, günlük bülten, portföy danışmanı ve strateji botları sizin için çalışır. Alarmlar ve emirler arka planda kontrol edilir.' },
-  { icon: '🔔', title: 'Bildirimler ve kısayollar', text: 'Sağ üstteki zil tüm bildirimleri toplar. Klavyede "?" tuşuna basarak kısayolları, Ctrl+K ile hızlı aramayı açabilirsiniz. İyi analizler!' },
+  { icon: '👋', title: "TradeMetrix'e hoş geldiniz", text: 'Borsa İstanbul, ABD borsaları, döviz, altın ve kripto paraları tek yerden takip edin. Kısa bir tur atalım; 1 dakika sürer.' },
+  { icon: '🏠', title: 'Ana Sayfa', text: '"Bugün ne oldu?" kartı piyasaların, portföyünüzün ve favorilerinizin gün içindeki durumunu birkaç cümleyle özetler.' },
+  { icon: '📊', title: 'Hisseye tıklayın', text: 'Herhangi bir listede veya ısı haritasında bir hisseye tıklayınca yandan özet kartı açılır: fiyat, kısa grafik, "bugün neden hareket etti?", Al/Sat ve alarm kurma.' },
+  { icon: '💼', title: '100.000 TL sanal bakiye', text: 'Gerçek fiyatlarla, gerçek para riski olmadan al-sat yaparak pratik edin. Portföyünüzü "Portföyüm" bölümünden izleyin.' },
+  { icon: '💡', title: 'Takıldığınız yerde', text: 'Her sayfanın üstünde o sayfanın ne işe yaradığı yazar. Altı noktalı terimlerin (RSI, F/K gibi) üzerine gelince kısa açıklama çıkar.' },
+  { icon: '🧰', title: 'Basit / Gelişmiş mod', text: 'Menünün altındaki anahtarla Gelişmiş moda geçerek strateji testi, otomatik botlar ve portföy laboratuvarı gibi ileri araçları açabilirsiniz. İyi analizler!' },
 ]
 
 export function Tour({ onClose }: { onClose: () => void }) {
@@ -201,15 +219,21 @@ export function Tour({ onClose }: { onClose: () => void }) {
 
 /* ------------------------------------------------------------------ Açılış ekranı */
 export function Splash({ done }: { done: boolean }) {
+  // Logo çizgilerle çizilir, isim harf harf belirir, altında grafik soldan sağa akar; bitince yumuşakça büyüyüp kaybolur
   const [gone, setGone] = useState(false)
-  useEffect(() => { if (done) { const id = setTimeout(() => setGone(true), 500); return () => clearTimeout(id) } }, [done])
+  useEffect(() => { if (done) { const id = setTimeout(() => setGone(true), 700); return () => clearTimeout(id) } }, [done])
   if (gone) return null
+  const pts = [8, 30, 22, 26, 44, 34, 30, 52, 46, 40, 62, 56, 70, 64, 88]
+  const line = pts.map((y, i) => `${i * 20},${100 - y}`).join(' ')
   return (
     <div className={`splash ${done ? 'out' : ''}`}>
-      <div className="splash-logo">◆</div>
-      <div className="splash-name">FinAnaliz</div>
-      <div className="muted">Yapay Zekâ Destekli Finansal Analiz</div>
-      <div className="splash-bar"><div /></div>
+      <LogoMark size={104} className="splash-mark" />
+      <div className="splash-name wordmark">{'TradeMetrix'.split('').map((c, i) => <span key={i} className={i >= 5 ? 'wm-accent' : ''} style={{ animationDelay: `${0.55 + i * 0.045}s` }}>{c}</span>)}</div>
+      <div className="splash-sub">Yapay zekâ destekli piyasa analizi</div>
+      <svg className="splash-chart" viewBox="0 0 280 100" preserveAspectRatio="none" aria-hidden>
+        <polyline className="sc-area" points={`0,100 ${line} 280,100`} />
+        <polyline className="sc-line" points={line} />
+      </svg>
     </div>
   )
 }
@@ -225,7 +249,7 @@ export function heikinAshi(candles: Candle[]): Candle[] {
   return out
 }
 
-/** Grafiği PNG olarak İndirilenler\FinAnaliz klasörüne kaydeder. */
+/** Grafiği PNG olarak İndirilenler\TradeMetrix klasörüne kaydeder. */
 export async function saveChartImage(chart: IChartApi | null, name: string) {
   if (!chart) throw new Error('Grafik hazır değil.')
   const canvas = chart.takeScreenshot()
@@ -302,6 +326,28 @@ export function Treemap({ groups, height = 560 }: { groups: { name: string; node
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ Veri kaynağı durumu */
+/** Yahoo Finance kısıtlama uyguladığında üstte sakin bir bilgi bandı gösterir; uygulama bu sürede son verilerle çalışır. */
+export function DataStatusBanner() {
+  const [st, setSt] = useState<{ ok: boolean; limited: boolean; retry_in: number; last_ok: number | null } | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = () => fetch('/api/data-status').then(r => r.json()).then(d => { if (alive) setSt(d) }).catch(() => {})
+    load()
+    const id = setInterval(load, 30_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
+  if (!st || st.ok) return null
+  const last = st.last_ok ? new Date(st.last_ok * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : null
+  return (
+    <div className="data-banner" role="status">
+      <span className="data-dot" />
+      <span><b>Veri kaynağı şu an yoğun.</b> Son kaydedilen fiyatlar gösteriliyor{last ? ` (en son güncelleme ${last})` : ''}.
+        {st.limited && st.retry_in > 0 ? ` Yaklaşık ${Math.ceil(st.retry_in / 60)} dk içinde otomatik olarak tekrar denenecek.` : ' Bağlantı tekrar deneniyor.'}</span>
     </div>
   )
 }

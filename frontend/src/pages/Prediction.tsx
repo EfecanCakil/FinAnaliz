@@ -3,12 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { api, fmtPct, fmtPrice, tone, type Point } from '../api'
 import Chart, { COLORS, type SeriesSpec } from '../components/Chart'
 import { ErrorBox, Loading, Stat, SymbolPicker } from '../components/common'
+import { ExplainCard, ScorecardCard, type Explanation } from '../components/AiExplain'
+import { PredictionJournalCard } from '../components/Records'
 
 type Metric = { model: string; direction_accuracy: number; mae: number; rmse: number; mae_pct: number; seconds?: number }
 type PredRes = {
   best_model: string; metrics: Metric[]; train_size: number; test_size: number
-  forecast: { last_price: number; up_probability: number; direction: string; expected_return_pct: number; expected_price: number }
+  forecast: { last_price: number; data_date?: string; target_date?: string; up_probability: number; direction: string; expected_return_pct: number; expected_price: number }
   feature_importance: { feature: string; importance: number }[]
+  explanation: Explanation | null
   model_info: Record<string, string>
   all_forecasts: Record<string, { up_probability: number; expected_return_pct: number }>
   chart: { actual: Point[]; predicted: Point[] }
@@ -21,6 +24,8 @@ const FEATURE_LABELS: Record<string, string> = {
   bb_pos: 'Bollinger konumu', vol10: '10 günlük oynaklık', vol_chg: 'Hacim değişimi', range: 'Gün içi aralık',
 }
 
+const trDay = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' })
+
 export default function Prediction() {
   const [params, setParams] = useSearchParams()
   const symbol = params.get('s') || 'BTC-USD'
@@ -28,9 +33,11 @@ export default function Prediction() {
   const [res, setRes] = useState<PredRes | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cardRun, setCardRun] = useState(0)
 
   const run = () => {
     setBusy(true); setError(null); setRes(null)
+    setCardRun(r => r + 1)
     api<PredRes>(`/predict/${encodeURIComponent(symbol)}?period=${period}`).then(setRes).catch(e => setError(e.message)).finally(() => setBusy(false))
   }
 
@@ -48,7 +55,7 @@ export default function Prediction() {
       </header>
       <div className="card">
         <div className="row gap wrap">
-          <SymbolPicker value={symbol} onChange={s => { setParams({ s }); setRes(null) }} />
+          <SymbolPicker value={symbol} onChange={s => { setParams({ s }); setRes(null); setCardRun(0) }} />
           <select value={period} onChange={e => setPeriod(e.target.value)}>
             <option value="1y">1 yıllık veri</option><option value="2y">2 yıllık veri</option><option value="5y">5 yıllık veri</option>
           </select>
@@ -62,17 +69,20 @@ export default function Prediction() {
         </p>
       </div>
       <ErrorBox error={error} />
+      <ScorecardCard symbol={symbol} period={period} run={cardRun} />
+      <PredictionJournalCard symbol={symbol} refresh={res ? cardRun : 0} />
       {busy && <Loading text="Veriler hazırlanıyor ve modeller eğitiliyor…" />}
       {res && (
         <>
           <div className="grid4">
             <div className="card kpi">
-              <div className="muted small">Ertesi gün beklenen yön</div>
+              <div className="muted small">{res.forecast.target_date ? `${trDay(res.forecast.target_date)} için beklenen yön` : 'Ertesi gün beklenen yön'}</div>
               <div className={`kpi-value ${res.forecast.up_probability >= 50 ? 'up' : 'down'}`}>{res.forecast.up_probability >= 50 ? '▲' : '▼'} {res.forecast.direction}</div>
               <div className="muted small">Yükseliş olasılığı: %{res.forecast.up_probability.toFixed(1)}</div>
               <div className="prob"><div style={{ width: `${res.forecast.up_probability}%` }} /></div>
             </div>
-            <div className="card kpi"><div className="muted small">Son fiyat</div><div className="kpi-value">{fmtPrice(res.forecast.last_price)}</div></div>
+            <div className="card kpi"><div className="muted small">Son fiyat</div><div className="kpi-value">{fmtPrice(res.forecast.last_price)}</div>
+              {res.forecast.data_date && <div className="muted small">{trDay(res.forecast.data_date)} verisiyle (canlı fiyat dahil)</div>}</div>
             <div className="card kpi">
               <div className="muted small">Beklenen getiri (regresyon)</div>
               <div className={`kpi-value ${tone(res.forecast.expected_return_pct)}`}>{fmtPct(res.forecast.expected_return_pct)}</div>
@@ -118,6 +128,8 @@ export default function Prediction() {
               </table>
             </div>
           )}
+
+          {res.explanation && <ExplainCard e={res.explanation} />}
 
           <div className="grid2">
             <div className="card">

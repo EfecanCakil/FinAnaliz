@@ -14,13 +14,14 @@ from . import market
 # ----------------------------------------------------------------------------- yardımcı
 def _returns(symbols: list[str], period: str = "1y") -> pd.DataFrame:
     """Varlıkların TL bazında günlük getirileri (ABD varlıkları USD/TRY ile çevrilir)."""
+    market.prefetch(["USDTRY=X", *symbols], period)
     usd = market.to_frame(market.history("USDTRY=X", period, "1d"))["close"]
-    usd.index = usd.index.normalize()
+    usd.index = market.local_days(usd.index)
     usd = usd[~usd.index.duplicated(keep="last")]
     cols = {}
     for s in symbols:
         c = market.to_frame(market.history(s, period, "1d"))["close"]
-        c.index = c.index.normalize()
+        c.index = market.local_days(c.index)
         c = c[~c.index.duplicated(keep="last")]
         if market.currency_of(s) == "USD":
             c = c * usd.reindex(c.index).ffill()
@@ -103,7 +104,7 @@ def cpi() -> pd.DataFrame:
     with _lock:
         if _cpi and time.time() - _cpi[0] < 12 * 3600:
             return _cpi[1]
-    req = urllib.request.Request(TCMB_URL, headers={"User-Agent": "Mozilla/5.0 FinAnaliz"})
+    req = urllib.request.Request(TCMB_URL, headers={"User-Agent": "Mozilla/5.0 TradeMetrix"})
     with urllib.request.urlopen(req, timeout=20) as resp:
         text = resp.read().decode("utf-8", errors="ignore")
     data = []
@@ -243,7 +244,7 @@ def time_travel(symbol: str, start: str, amount: float) -> dict:
     symbol = symbol.upper()
     df = market.to_frame(market.history(symbol, "max", "1d"))
     c = df["close"]
-    c.index = c.index.normalize()
+    c.index = market.local_days(c.index)
     c = c[~c.index.duplicated(keep="last")]
     start_ts = pd.Timestamp(start)
     after = c[c.index >= start_ts]
@@ -268,7 +269,7 @@ def time_travel(symbol: str, start: str, amount: float) -> dict:
                 continue
             try:
                 a = market.to_frame(market.history(alt, "max", "1d"))["close"]
-                a.index = a.index.normalize()
+                a.index = market.local_days(a.index)
                 a = a[a.index >= start_ts]
                 if len(a):
                     alts[label] = amount * float(a.iloc[-1]) / float(a.iloc[0])

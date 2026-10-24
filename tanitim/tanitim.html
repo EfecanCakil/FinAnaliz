@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradeMetrix Nasıl Çalışır</title>
+<style>
+:root{
+  --bg:#0b1220; --panel:#111a2e; --panel2:#16213a; --line:#24324f; --text:#e6ecf7; --muted:#93a1bd;
+  --acc:#22c55e; --acc2:#38bdf8; --warn:#f59e0b; --red:#f43f5e; --vio:#a78bfa;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.5}
+body{display:flex;overflow:hidden}
+a{color:var(--acc2)}
+code,.mono{font-family:Consolas,"Cascadia Mono",monospace;font-size:.92em}
+code{background:#0a1020;border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:#bfe3ff}
+
+/* yan menü */
+nav{width:250px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 12px}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 8px 16px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.brand .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;font-weight:800;color:#06210f}
+.brand b{display:block;font-size:16px}.brand small{color:var(--muted)}
+nav button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:9px;color:var(--muted);font-size:14px}
+nav button .n{width:22px;height:22px;border-radius:6px;background:var(--panel2);display:grid;place-items:center;font-size:11px;flex:none}
+nav button:hover{background:var(--panel2);color:var(--text)}
+nav button.on{background:#13304a;color:#fff}
+nav button.on .n{background:var(--acc2);color:#04223a;font-weight:700}
+nav .foot{margin-top:auto;color:var(--muted);font-size:12px;padding:8px}
+
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:10px;padding:12px 26px;border-bottom:1px solid var(--line)}
+.top .crumb{color:var(--muted);font-size:13px;flex:1}
+.btn{all:unset;cursor:pointer;padding:7px 14px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:13px}
+.btn:hover{border-color:var(--acc2)}
+.btn.pri{background:var(--acc);color:#05200e;border-color:var(--acc);font-weight:600}
+.progress{height:3px;background:var(--line)}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+
+#stage{flex:1;overflow:auto;padding:30px 40px 50px}
+section{display:none;max-width:1180px;margin:0 auto;animation:fade .35s ease}
+section.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+h1{font-size:34px;margin:0 0 6px;letter-spacing:-.5px}
+h2{font-size:26px;margin:0 0 4px}
+h3{font-size:16px;margin:0 0 8px}
+.lead{color:var(--muted);font-size:16px;margin:0 0 22px;max-width:900px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:#0e2a1b;color:#86efac;border:1px solid #1d5a35;margin:0 4px 4px 0}
+.tag.b{background:#0b2536;color:#7dd3fc;border-color:#1b4f6e}
+.tag.v{background:#1e1636;color:#c4b5fd;border-color:#43357a}
+.tag.o{background:#2d1f07;color:#fcd34d;border-color:#6b4a0f}
+
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.card p{margin:0;color:var(--muted)}
+.card ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+.card li{margin:3px 0}
+.stat b{display:block;font-size:30px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat span{color:var(--muted);font-size:13px}
+.note{border-left:3px solid var(--warn);background:#1d1709;padding:10px 14px;border-radius:0 10px 10px 0;color:#f3dfb1;margin-top:16px;font-size:14px}
+.say{border-left:3px solid var(--acc2);background:#0c1e2e;padding:10px 14px;border-radius:0 10px 10px 0;color:#cfe8fa;margin-top:16px;font-size:14px}
+.say b{color:#7dd3fc}
+
+/* kapak */
+.hero{display:grid;grid-template-columns:1.3fr 1fr;gap:30px;align-items:center;min-height:62vh}
+.hero h1{font-size:42px;line-height:1.15}
+.hero .sub{color:var(--muted);font-size:17px;margin:14px 0 22px}
+.ticker{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.ticker canvas{width:100%;height:220px;display:block}
+
+/* mimari şema */
+.arch{display:grid;grid-template-columns:1fr 330px;gap:18px}
+.layers{display:flex;flex-direction:column;gap:10px}
+.layer{border:1px dashed var(--line);border-radius:var(--r);padding:10px 12px 12px;position:relative}
+.layer>.lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.boxes{display:flex;flex-wrap:wrap;gap:8px}
+.box{cursor:pointer;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;transition:.15s;user-select:none}
+.box small{display:block;color:var(--muted);font-size:11px}
+.box:hover{border-color:var(--acc2);transform:translateY(-1px)}
+.box.sel{border-color:var(--acc);background:#0f2a1d;box-shadow:0 0 0 3px #22c55e22}
+.arrow{text-align:center;color:var(--muted);font-size:12px;line-height:1}
+.arrow::before{content:"▼";display:block;color:var(--acc2);font-size:14px}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;position:sticky;top:0;align-self:start;min-height:300px}
+.detail .ph{color:var(--muted)}
+.detail h3{font-size:18px}
+.detail .file{margin-top:12px;font-size:12px;color:var(--muted)}
+
+/* istek akışı */
+.flow{display:flex;align-items:stretch;gap:0;margin:8px 0 18px;overflow-x:auto;padding-bottom:6px}
+.fnode{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center;font-size:13px;transition:.25s;position:relative}
+.fnode .ic{font-size:22px;display:block;margin-bottom:4px}
+.fnode small{display:block;color:var(--muted);font-size:11px}
+.fnode.act{border-color:var(--acc);background:#0f2a1d;box-shadow:0 0 18px #22c55e44;transform:translateY(-3px)}
+.fnode.done{border-color:#1d5a35}
+.fgap{width:28px;flex:none;display:grid;place-items:center;color:var(--line);font-size:18px;transition:.25s}
+.fgap.act{color:var(--acc)}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:8px}
+.step{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;opacity:.45;transition:.25s}
+.step::before{counter-increment:s;content:counter(s);flex:none;width:24px;height:24px;border-radius:7px;background:var(--panel2);display:grid;place-items:center;font-size:12px;font-weight:700}
+.step.act{opacity:1;border-color:var(--acc)}
+.step.act::before{background:var(--acc);color:#05200e}
+.step.done{opacity:.85}
+.step div{flex:1}.step p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.ctrl{display:flex;gap:8px;margin-bottom:14px;align-items:center}
+pre{background:#070d19;border:1px solid var(--line);border-radius:12px;padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.55;margin:10px 0 0;color:#cdd8ee}
+pre .k{color:#c084fc}.pre .s,pre .s{color:#86efac}pre .c{color:#64748b}pre .f{color:#7dd3fc}pre .n{color:#fcd34d}
+
+/* ML */
+.pipe{display:flex;gap:8px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
+.pipe .card{flex:1;min-width:150px;text-align:center;padding:12px}
+.pipe .card .ic{font-size:24px}
+.pipe .sep{display:grid;place-items:center;color:var(--acc2);font-size:20px}
+.feat{display:flex;flex-wrap:wrap;gap:6px}
+.feat span{font-family:Consolas,monospace;font-size:12px;padding:3px 8px;border-radius:7px;background:#0a1a2a;border:1px solid #1b4f6e;color:#7dd3fc;cursor:help}
+.split{display:flex;height:34px;border-radius:9px;overflow:hidden;margin:10px 0 4px;font-size:12px;font-weight:600}
+.split .tr{flex:8;background:#164e33;display:grid;place-items:center}
+.split .te{flex:2;background:#7c2d12;display:grid;place-items:center}
+.models{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.model{cursor:pointer}
+.model.sel{border-color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:12px}
+.bar{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+
+/* motor */
+.clock{display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center}
+.ring{position:relative;width:220px;height:220px}
+.ring svg{transform:rotate(-90deg)}
+.ring .ctr{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.ring .ctr b{font-size:34px;display:block}
+.ring .ctr span{color:var(--muted);font-size:12px}
+.task{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);margin-bottom:6px;font-size:14px;transition:.2s}
+.task .dot{width:9px;height:9px;border-radius:50%;background:var(--line);flex:none}
+.task .when{margin-left:auto;color:var(--muted);font-size:12px}
+.task.hit{border-color:var(--acc)}.task.hit .dot{background:var(--acc);box-shadow:0 0 10px var(--acc)}
+
+/* db */
+.tbl{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tbl h4{margin:0;padding:8px 12px;background:var(--panel2);font-size:13px;font-family:Consolas,monospace;color:#7dd3fc}
+.tbl p{margin:0;padding:8px 12px;color:var(--muted);font-size:12.5px}
+
+/* güvenlik: şifre özeti demo */
+.demo{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.demo input{background:#070d19;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 12px;font-size:14px;width:220px}
+.hash{word-break:break-all;font-family:Consolas,monospace;font-size:12px;color:#86efac;background:#070d19;border:1px solid var(--line);border-radius:9px;padding:10px;margin-top:10px;min-height:40px}
+.jwt{font-family:Consolas,monospace;font-size:12.5px;word-break:break-all;background:#070d19;border:1px solid var(--line);border-radius:9px;padding:10px}
+.jwt .h{color:#f87171}.jwt .p{color:#c084fc}.jwt .s{color:#38bdf8}
+
+/* teknoloji */
+.tech{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tech .card{padding:12px 14px}
+.tech b{display:block}
+.tech span{color:var(--muted);font-size:12.5px}
+.tech .cat{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--acc2)}
+
+.build{display:flex;gap:0;flex-wrap:wrap}
+.build .card{flex:1;min-width:180px;border-radius:0;border-right:none}
+.build .card:first-child{border-radius:var(--r) 0 0 var(--r)}
+.build .card:last-child{border-radius:0 var(--r) var(--r) 0;border-right:1px solid var(--line)}
+.build .card .ic{font-size:24px}
+
+.qa details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}
+.qa summary{cursor:pointer;font-weight:600}
+.qa details p{color:var(--muted);margin:8px 0 2px}
+
+/* kaynak kod gezgini */
+.code-link{display:inline-block;margin-top:8px;font-size:12.5px;color:#7dd3fc}
+.code-link::before{content:"</> ";color:var(--acc)}
+.cv{display:grid;grid-template-columns:270px 1fr 250px;gap:12px;height:calc(100vh - 215px);min-height:420px}
+.cv>div{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.cv input{background:#070d19;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:7px 10px;font-size:13px;margin:10px;width:calc(100% - 20px)}
+.ftree{overflow:auto;padding:0 6px 10px;flex:1}
+.ftree .grp{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--acc2);padding:10px 8px 4px}
+.ftree .fi{cursor:pointer;padding:4px 8px;border-radius:7px;font-size:12.5px;font-family:Consolas,monospace;display:flex;justify-content:space-between;gap:6px;color:#c9d4ea}
+.ftree .fi small{color:var(--muted);font-family:"Segoe UI";font-size:11px;flex:none}
+.ftree .fi:hover{background:var(--panel2)}
+.ftree .fi.on{background:#13304a;color:#fff}
+.ftree .hit{color:var(--warn);font-size:11px;padding:0 8px 4px 18px;cursor:pointer;font-family:Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ftree .hit:hover{color:#fff}
+.chead{padding:10px 14px;border-bottom:1px solid var(--line)}
+.chead b{font-family:Consolas,monospace;color:#7dd3fc}
+.chead p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.cbody{flex:1;overflow:auto;position:relative;background:#070d19}
+.cwrap{display:flex;min-width:max-content;position:relative}
+.cwrap pre{margin:0;border:0;border-radius:0;background:transparent;padding:10px 14px;font-size:12.5px;line-height:19px;overflow:visible}
+.cwrap pre.ln{color:#3b4a68;text-align:right;user-select:none;padding-right:10px;border-right:1px solid var(--line);position:sticky;left:0;background:#070d19;z-index:1}
+.lhl{position:absolute;left:0;right:0;height:19px;background:#22c55e22;border-left:3px solid var(--acc);pointer-events:none;display:none}
+.syms{overflow:auto;padding:4px 6px 10px;flex:1}
+.syms .sy{cursor:pointer;padding:4px 8px;border-radius:7px;font-size:12px;font-family:Consolas,monospace}
+.syms .sy:hover{background:var(--panel2)}
+.syms .sy i{font-style:normal;font-size:10px;color:var(--vio);margin-right:6px}
+.syms .sy small{display:block;color:var(--acc);font-size:10.5px}
+pre .d{color:#fbbf24}pre .b{color:#f472b6}
+
+/* ekran görüntüleri */
+.gal{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.shot{cursor:zoom-in;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;transition:.15s}
+.shot:hover{border-color:var(--acc2);transform:translateY(-2px)}
+.shot img{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top left;display:block;border-bottom:1px solid var(--line)}
+.shot div{padding:7px 10px;font-size:12.5px}
+.shot small{display:block;color:var(--muted);font-size:11px}
+.lb{position:fixed;inset:0;background:#000d;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.lb.on{display:flex}
+.lb img{max-width:100%;max-height:calc(100vh - 150px);border-radius:10px;border:1px solid var(--line)}
+.lb .cap{max-width:1100px;margin-top:12px;text-align:center;color:var(--text)}
+.lb .cap p{color:var(--muted);margin:4px 0 0;font-size:14px}
+.lb .x{position:absolute;top:14px;right:18px}
+.lb .nv{position:absolute;top:50%;font-size:26px;padding:10px 16px}
+.lb .nv.l{left:14px}.lb .nv.r{right:14px}
+
+/* deney sonuçları */
+.atabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.atabs button{all:unset;cursor:pointer;padding:7px 12px;border-radius:9px;background:var(--panel);border:1px solid var(--line);font-size:13px}
+.atabs button small{color:var(--muted);margin-left:4px}
+.atabs button.on{background:#13304a;border-color:var(--acc2)}
+.hb{display:grid;grid-template-columns:190px 1fr 62px;gap:8px;align-items:center;font-size:12.5px;margin:5px 0}
+.hb .tr{height:16px;background:#0a1222;border-radius:4px;position:relative;overflow:visible}
+.hb .fl{height:100%;border-radius:4px;background:linear-gradient(90deg,#1e6f9f,var(--acc2))}
+.hb.best .fl{background:linear-gradient(90deg,#15803d,var(--acc))}
+.hb.naive .fl{background:#475569}
+.hb .ref{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--warn)}
+.hb .ref.h{border-left-color:#64748b}
+.hb b{text-align:right;font-family:Consolas,monospace}
+.legend{display:flex;gap:14px;font-size:11.5px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;border-top:2px dashed var(--warn);vertical-align:middle;margin-right:4px}
+.legend i.h{border-color:#64748b}
+.pos{color:var(--acc)}.neg{color:var(--red)}
+svg text{fill:var(--muted);font-size:11px;font-family:"Segoe UI",sans-serif}
+.finding{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.finding:last-child{border:0}
+.finding span{flex:none}
+
+/* konuşma notları */
+#notes{position:fixed;left:270px;right:20px;bottom:16px;background:#0d1b2e;border:1px solid #1b4f6e;border-radius:14px;padding:14px 18px 14px 18px;box-shadow:0 10px 40px #0009;z-index:40;display:none;max-height:38vh;overflow:auto}
+#notes.on{display:block}
+#notes h4{margin:0 0 6px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#7dd3fc}
+#notes p{margin:0 0 6px;font-size:15px;line-height:1.6;color:#dbeafe}
+#notes .x{position:absolute;top:10px;right:12px}
+.btn.on{border-color:var(--acc2);background:#13304a}
+
+/* bölümlü menü */
+nav #navlist{overflow:auto;flex:1;margin:0 -4px;padding:0 4px}
+nav .chh{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--acc2);padding:12px 10px 4px;font-weight:600}
+nav .chh:first-child{padding-top:2px}
+nav button{padding:6px 10px;font-size:13.5px}
+.chlabel{display:inline-block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--acc2);margin-bottom:6px;font-weight:600}
+
+/* kısaca kutusu */
+.kisaca{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;background:linear-gradient(90deg,#0f2a1d,#0d1f2f);border:1px solid #1d5a35;border-radius:var(--r);padding:12px 16px;margin:0 0 20px;max-width:1180px}
+.kisaca .ic{font-size:22px;grid-row:span 2;align-self:center}
+.kisaca p{margin:0;font-size:15.5px;line-height:1.55}
+.kisaca p.b{color:#a7c4bc;font-size:14px}
+.kisaca p.b::before{content:"Benzetme: ";color:#86efac;font-weight:600}
+
+/* sözlük terimleri */
+.term{border-bottom:1px dotted #7dd3fc;cursor:help}
+#tip{position:fixed;z-index:60;max-width:340px;background:#0d1b2e;border:1px solid #1b4f6e;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.5;color:#dbeafe;box-shadow:0 10px 30px #000a;pointer-events:none;display:none}
+#tip b{display:block;color:#7dd3fc;margin-bottom:2px}
+.glgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.glgrid .card{padding:12px 14px}
+.glgrid .card b{color:#7dd3fc}
+.glgrid .card small{float:right;color:var(--muted);font-size:11px}
+.glgrid .card p{margin-top:4px;font-size:13.5px}
+
+/* çipler, arama, tablolar */
+.apibar{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.apibar input{background:#070d19;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 12px;font-size:14px;width:360px}
+.apibar span{color:var(--muted);font-size:13px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{all:unset;cursor:pointer;padding:5px 11px;border-radius:99px;background:var(--panel);border:1px solid var(--line);font-size:12.5px}
+.chip small{color:var(--muted);margin-left:4px}
+.chip:hover{border-color:var(--acc2)}
+.chip.on{background:#13304a;border-color:var(--acc2);color:#fff}
+.apiwrap{max-height:calc(100vh - 470px);min-height:240px;overflow:auto}
+.apiwrap table th{position:sticky;top:0;background:var(--panel2);z-index:1}
+.apiwrap tr.rw{cursor:pointer}.apiwrap tr.rw:hover td{background:#13213a}
+.m{display:inline-block;font-family:Consolas,monospace;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;min-width:44px;text-align:center}
+.m.get{background:#0b2a3d;color:#7dd3fc}.m.post{background:#0f2a1d;color:#86efac}.m.put,.m.patch{background:#2d1f07;color:#fcd34d}.m.delete{background:#3a0f19;color:#fda4af}
+.mth{padding:12px 14px}.mth p{margin-top:6px;font-size:13px}
+
+/* özellik haritası */
+.fmap{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
+.fm-list{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px;max-height:calc(100vh - 250px);overflow:auto}
+.fm-list .grp{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--acc2);padding:10px 8px 4px}
+.fm-list .it{cursor:pointer;padding:6px 9px;border-radius:8px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.fm-list .it:hover{background:var(--panel2)}.fm-list .it.on{background:#13304a}
+.fm-list .it small{margin-left:auto;color:var(--muted);font-size:11px}
+.fm-detail img{width:100%;border-radius:10px;border:1px solid var(--line);margin-top:10px;cursor:zoom-in}
+.flowmini{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;font-size:13px}
+.flowmini>span{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.flowmini i{color:var(--acc2);font-style:normal}
+
+/* restoran benzetmesi */
+.ctrl .restmsg{color:#cfe8fa;font-size:14.5px;margin-left:6px}
+.rest{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.role{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 12px;text-align:center;transition:.3s}
+.role .e{font-size:34px;display:block}
+.role b{display:block;margin-top:4px}
+.role small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.role .t{display:inline-block;margin-top:8px;font-size:11px;padding:2px 8px;border-radius:99px;background:#0b2536;color:#7dd3fc;border:1px solid #1b4f6e}
+.role.on{border-color:var(--acc);background:#0f2a1d;box-shadow:0 0 22px #22c55e44;transform:translateY(-4px)}
+
+/* grafik okuma, kaydırıcı */
+.readout{font-size:13px;color:var(--muted);padding:6px 4px 0;min-height:42px}
+.readout b{color:var(--text)}
+.sl{display:block;font-size:13.5px;margin:10px 0 2px;color:var(--muted)}
+.sl b{color:var(--text)}
+.sl input[type=range]{width:100%;accent-color:var(--acc2);margin-top:4px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13.5px}
+.kv span{color:var(--muted)}.kv b{text-align:right;font-family:Consolas,monospace}
+
+/* veritabanı */
+.dbx{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+.dbx svg .tb{cursor:pointer}
+.dbx svg .tb rect{fill:#16213a;stroke:#24324f;transition:.15s}
+.dbx svg .tb:hover rect{stroke:#38bdf8}
+.dbx svg .tb.on rect{fill:#0f2a1d;stroke:#22c55e}
+.dbx svg .tb text{fill:#e6ecf7;font-size:12px;font-family:Consolas,monospace}
+.dbx svg line{stroke:#2b3d60}
+.dbx svg line.on{stroke:#22c55e;stroke-width:2}
+.cols{font-family:Consolas,monospace;font-size:12.5px}
+.cols div{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a2742}
+.cols span{color:var(--muted)}
+.cols .pk{color:#fcd34d}.cols .fk{color:#86efac}.cols .add{color:#c4b5fd}
+
+/* takas zaman çizelgesi ve emirler */
+.tl{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 0}
+.tl div{border-top:3px solid var(--line);padding:8px 6px 0;font-size:12.5px;color:var(--muted);position:relative}
+.tl div::before{content:"";position:absolute;top:-8px;left:6px;width:12px;height:12px;border-radius:50%;background:var(--line)}
+.tl div b{display:block;color:var(--text);font-size:13.5px}
+.tl div.on{border-color:var(--acc)}.tl div.on::before{background:var(--acc)}
+.ordlog{font-family:Consolas,monospace;font-size:12.5px;min-height:70px;margin-top:6px;color:#cdd8ee}
+.ordlog div{padding:2px 0}
+
+/* zorluklar */
+.chal .card{display:grid;gap:6px}
+.chal-p{color:#fda4af}.chal-s{color:#86efac}
+.chal .card p{margin:0}
+
+@media (max-width:1000px){
+  .gal{grid-template-columns:repeat(2,1fr)} #notes{left:16px;right:16px}
+  .fmap,.dbx{grid-template-columns:1fr}.rest{grid-template-columns:repeat(3,1fr)}.glgrid{grid-template-columns:1fr 1fr}
+  nav{display:none}.g3,.g4,.tech,.models{grid-template-columns:repeat(2,1fr)}
+  .arch,.hero,.clock{grid-template-columns:1fr}#stage{padding:20px 16px}
+}
+</style>
+</head>
+<body>
+<nav id="nav">
+  <div class="brand"><div class="logo">TM</div><div><b>TradeMetrix</b><small>Nasıl çalışır?</small></div></div>
+  <div id="navlist"></div>
+  <div class="foot">← → tuşları ile gezin<br>F: tam ekran · N: konuşma notları</div>
+</nav>
+<main>
+  <div class="progress"><i id="prog"></i></div>
+  <div class="top">
+    <div class="crumb" id="crumb"></div>
+    <button class="btn" id="notesBtn" title="Konuşma notları (N)">🎤 Notlar</button>
+    <button class="btn" id="codeBtn">&lt;/&gt; Kaynak kod</button>
+    <button class="btn" id="fs">⛶ Tam ekran</button>
+    <button class="btn" id="prev">← Önceki</button>
+    <button class="btn pri" id="next">Sonraki →</button>
+  </div>
+  <div id="stage">
+
+<!-- 1 KAPAK -->
+<section data-title="Giriş" data-ch="1 · Proje">
+  <div class="hero">
+    <div>
+      <span class="tag">Bitirme Projesi</span><span class="tag b">Masaüstü uygulaması (exe)</span><span class="tag v">İstemci–sunucu mimarisi</span>
+      <h1>Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu</h1>
+      <div class="sub"><b>TradeMetrix</b> (eski çalışma adı: FinAnaliz). Piyasa verisini toplar, teknik ve temel analiz yapar, makine öğrenmesiyle ertesi günün fiyat yönünü tahmin eder ve sanal bir hesapla risksiz alım satım yapılmasını sağlar.</div>
+      <div class="grid g4">
+        <div class="card stat"><b id="stRoutes">128</b><span>REST API uç noktası</span></div>
+        <div class="card stat"><b id="stMods">38</b><span>Python arka uç modülü</span></div>
+        <div class="card stat"><b id="stPages">29</b><span>React arayüz sayfası</span></div>
+        <div class="card stat"><b id="stTables">19</b><span>SQLite tablosu</span></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card stat"><b id="stPy">~8.300</b><span>satır Python (arka uç)</span></div>
+        <div class="card stat"><b id="stTs">~7.900</b><span>satır TypeScript/React (arayüz)</span></div>
+      </div>
+    </div>
+    <div class="ticker">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>THYAO.IS · simülasyon</b><span id="tkv" class="mono" style="color:var(--acc)"></span></div>
+      <canvas id="tk"></canvas>
+      <div style="color:var(--muted);font-size:12px;margin-top:6px">Bu sunum, uygulamanın arka planda nasıl çalıştığını katman katman anlatır. Grafik temsilîdir.</div>
+    </div>
+  </div>
+  <div class="say"><b>Sunarken:</b> "Uygulama tek bir exe olarak çalışıyor ama içinde gerçek bir web sunucusu (FastAPI) ve bir web arayüzü (React) var. Bu sayede ileride hiçbir kodu baştan yazmadan web sitesine dönüştürülebiliyor."</div>
+</section>
+
+<!-- PROBLEM VE AMAÇ -->
+<section data-title="Problem ve amaç" data-ch="1 · Proje">
+  <h2>Problem ve projenin amacı</h2>
+  <p class="lead">Proje, bireysel yatırımcının karşılaştığı dört temel soruna çözüm olarak tasarlandı.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>❗ Problem</h3>
+      <ul>
+        <li><b>Veri dağınık:</b> Borsa İstanbul, ABD borsaları, döviz, kripto, KAP bildirimleri, SPK halka arzları ve haberler ayrı ayrı sitelerde.</li>
+        <li><b>Araçlar pahalı ve yabancı dilde:</b> Profesyonel analiz platformları ücretli ve çoğunlukla İngilizce; Türkiye'ye özgü veriyi (KAP, SPK, gram altın, TL bazlı oranlar) kapsamıyor.</li>
+        <li><b>YZ tahminleri "kara kutu":</b> Tahmin sunan araçlar ne kadar başarılı olduklarını göstermiyor, hangi modelin neden seçildiği belirsiz.</li>
+        <li><b>Risksiz pratik ortamı yok:</b> Yeni başlayanlar öğrenmek için gerçek para riske atmak zorunda kalıyor.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🎯 Amaç</h3>
+      <ul>
+        <li>Dört piyasayı ve Türkiye'ye özgü kaynakları <b>tek bir Türkçe platformda</b> toplamak.</li>
+        <li>Teknik ve temel analizi <b>otomatikleştirmek</b> (göstergeler, formasyonlar, tarama, strateji testi).</li>
+        <li>Birden fazla makine öğrenmesi modelini <b>şeffaf biçimde karşılaştırmak</b>: her model naif bir referansla ve hata ölçütleriyle birlikte gösterilir.</li>
+        <li><b>100.000 TL sanal hesapla</b> gerçek piyasa fiyatlarıyla risksiz alım satım pratiği sunmak.</li>
+        <li>İleride web sürümüne dönüştürülebilecek <b>istemci–sunucu mimarisi</b> kurmak.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>🔬 Yöntem</h3><p>Açık veri kaynakları (Yahoo Finance, KAP, SPK, Google Haberler), zaman sırası korunarak eğitim/test ayrımı, naif modelle kıyaslama, komisyonlu geri test.</p></div>
+    <div class="card"><h3>📦 Kapsam</h3><p>Masaüstü uygulaması (Windows exe), 29 sayfa, 128 API uç noktası, çok kullanıcılı yerel veritabanı, isteğe bağlı LLM desteği.</p></div>
+    <div class="card"><h3>⚠️ Sınır</h3><p>Eğitim ve bilgilendirme amaçlıdır, yatırım tavsiyesi vermez. Veriler gecikmelidir; gerçek para ile işlem yapılmaz.</p></div>
+  </div>
+</section>
+
+<!-- UYGULAMA EKRANLARI -->
+<section data-title="Uygulamadan ekranlar" data-ch="1 · Proje">
+  <h2>Uygulamadan ekranlar</h2>
+  <p class="lead">Bu görüntüler uygulamanın gerçek verilerle çalışırken alınmış hâlidir. Büyütmek için tıklayın; büyük görünümde ekranın arkasında çalışan kod dosyalarına da geçebilirsiniz.</p>
+  <div class="gal" id="gal"></div>
+  <div class="lb" id="lb">
+    <button class="btn x" id="lbX">✕ Kapat (Esc)</button>
+    <button class="btn nv l" id="lbP">‹</button><button class="btn nv r" id="lbN">›</button>
+    <img id="lbImg" alt="">
+    <div class="cap" id="lbCap"></div>
+  </div>
+</section>
+
+<!-- ÖZELLİK HARİTASI -->
+<section data-title="Özellik haritası" data-ch="1 · Proje">
+  <h2>Özellik haritası: hangi sayfa ne yapıyor, hangi kodu çalıştırıyor?</h2>
+  <p class="lead">Uygulamadaki bütün sayfalar, menüdeki yerleriyle birlikte. Bir sayfa seçince ne işe yaradığını, ekranı hangi arayüz dosyasının çizdiğini ve sunucudan hangi verileri istediğini görürsünüz. Bu liste elle yazılmadı, koddan otomatik çıkarıldı.</p>
+  <div class="fmap"><div class="fm-list" id="fmList"></div><div class="fm-detail card" id="fmDetail"></div></div>
+</section>
+
+<!-- BÜYÜK RESİM -->
+<section data-title="Büyük resim: basit anlatım" data-ch="2 · Mimari">
+  <h2>Büyük resim: uygulama bir restoran gibi çalışır</h2>
+  <p class="lead">Teknik ayrıntılara girmeden önce bütün sistemi tek bir benzetmeyle anlatalım. Her rolün projede gerçek bir karşılığı var. "Siparişi izle" düğmesine basarak bir isteğin baştan sona yolculuğunu görün.</p>
+  <div class="ctrl"><button class="btn pri" id="restPlay">▶ Siparişi izle</button><span id="restMsg" class="restmsg">Kullanıcı bir hisse senedinin grafiğini görmek istiyor…</span></div>
+  <div class="rest" id="rest"></div>
+  <div class="card" style="margin-top:16px;padding:0">
+    <table id="restTable"></table>
+  </div>
+  <div class="say"><b>Sunarken:</b> "Arayüz sadece menü ve salondur; yemeği yapmaz. Bütün hesaplamalar mutfakta, yani Python tarafında yapılır. Garson (API) ikisi arasında sipariş ve tabak taşır. Bu ayrım sayesinde salonu değiştirsek bile (masaüstü yerine web sitesi) mutfak aynı kalır."</div>
+</section>
+
+<!-- 2 GENEL MİMARİ -->
+<section data-title="Genel mimari" data-ch="2 · Mimari">
+  <h2>Genel mimari</h2>
+  <p class="lead">Uygulama üç katmandan oluşur: <b>arayüz</b> (React), <b>yerel REST API</b> (FastAPI) ve <b>veri</b> (SQLite + dış kaynaklar). Ayrıntıyı görmek için bir kutuya tıklayın.</p>
+  <div class="arch">
+    <div class="layers" id="layers"></div>
+    <div class="detail" id="detail"><div class="ph">← Bir bileşen seçin.<br><br>Her kutu projede gerçek bir dosyaya / modüle karşılık gelir.</div></div>
+  </div>
+</section>
+
+<!-- 3 EXE AÇILIŞI -->
+<section data-title="Exe açılınca ne olur?" data-ch="2 · Mimari">
+  <h2>TradeMetrix.exe açılınca ne olur?</h2>
+  <p class="lead">Giriş noktası <code>backend/desktop_app.py</code>. Exe çift tıklandığında aşağıdaki adımlar 1–3 saniye içinde gerçekleşir.</p>
+  <div class="grid g2">
+    <div class="steps" id="bootSteps">
+      <div class="step"><div><b>Veri klasörü belirlenir</b><p>Paketlenmiş sürümde kullanıcı verileri <code>%APPDATA%\FinAnaliz</code> altında tutulur (veritabanı, ayarlar, gizli anahtar).</p></div></div>
+      <div class="step"><div><b>Boş port seçilir</b><p><code>pick_port()</code> 8765–8774 arasında boş bir port arar. Port sabit kalırsa tarayıcı deposundaki oturum korunur.</p></div></div>
+      <div class="step"><div><b>FastAPI sunucusu arka planda başlar</b><p><code>uvicorn</code> ayrı bir iş parçacığında (thread) yalnızca <code>127.0.0.1</code> üzerinde dinler, yani dışarıdan erişilemez.</p></div></div>
+      <div class="step"><div><b>Veritabanı ve arka plan motoru hazırlanır</b><p>Başlangıç olayında tablolar oluşturulur (<code>CREATE TABLE IF NOT EXISTS</code>) ve <code>engine.start()</code> dakikalık döngüyü başlatır.</p></div></div>
+      <div class="step"><div><b>Sunucunun hazır olması beklenir</b><p><code>wait_ready()</code> en fazla 30 sn boyunca <code>/api/markets</code> adresini yoklar.</p></div></div>
+      <div class="step"><div><b>Pencere açılır (pywebview + WebView2)</b><p>Windows'un Edge tabanlı WebView2 bileşeniyle yerel bir pencere açılır ve React arayüzü yüklenir. Tarayıcı çubuğu yoktur, normal bir masaüstü uygulaması gibi görünür.</p></div></div>
+      <div class="step"><div><b>Sistem tepsisi simgesi (pystray)</b><p>Pencere kapatılınca uygulama tepside çalışmaya devam eder, alarmları izler ve Windows bildirimi gönderir. Mini pencere (widget) de buradan açılır.</p></div></div>
+    </div>
+    <div>
+      <div class="ctrl"><button class="btn pri" id="bootPlay">▶ Açılışı canlandır</button><span id="bootMsg" style="color:var(--muted);font-size:13px"></span></div>
+      <pre><span class="c"># backend/desktop_app.py (sadeleştirilmiş)</span>
+<span class="k">def</span> <span class="f">main</span>():
+    port = <span class="f">pick_port</span>(<span class="n">8765</span>)
+    server = uvicorn.<span class="f">Server</span>(uvicorn.<span class="f">Config</span>(app, host=<span class="s">"127.0.0.1"</span>, port=port))
+    threading.<span class="f">Thread</span>(target=server.run, daemon=<span class="k">True</span>).<span class="f">start</span>()
+
+    url = <span class="s">f"http://127.0.0.1:{port}"</span>
+    <span class="k">if not</span> <span class="f">wait_ready</span>(url):
+        <span class="c"># hata penceresi gösterilir</span>
+        ...
+    window = webview.<span class="f">create_window</span>(<span class="s">"TradeMetrix"</span>, url)
+    <span class="f">start_tray</span>(window)          <span class="c"># pystray</span>
+    webview.<span class="f">start</span>()</pre>
+      <a class="code-link" href="#" data-code="backend/desktop_app.py" data-sym="main">Gerçek kodu aç: desktop_app.py → main()</a> &nbsp; <a class="code-link" href="#" data-code="backend/desktop_app.py" data-sym="pick_port">Gerçek kodu aç: desktop_app.py → pick_port()</a>
+      <div class="note">Neden tarayıcı yerine pywebview? Kullanıcı tek bir exe'ye tıklar, Python veya Node.js kurması gerekmez; ama arka planda tam bir web uygulaması çalışır.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 İSTEĞİN YOLCULUĞU -->
+<section data-title="Bir isteğin yolculuğu" data-ch="2 · Mimari">
+  <h2>Bir isteğin yolculuğu: "THYAO grafiğini aç"</h2>
+  <p class="lead">Kullanıcı Teknik Analiz sayfasında bir hisse seçtiğinde verinin hangi katmanlardan geçtiğini adım adım izleyin.</p>
+  <div class="ctrl"><button class="btn pri" id="reqPlay">▶ Oynat</button><button class="btn" id="reqStep">Adım adım</button><button class="btn" id="reqReset">Sıfırla</button></div>
+  <div class="flow" id="reqFlow"></div>
+  <div class="grid g2">
+    <div class="steps" id="reqSteps"></div>
+    <pre id="reqCode"><span class="c">// Oynat'a basın; her adımda ilgili kod burada görünecek.</span></pre>
+  </div>
+</section>
+
+<!-- API KATALOĞU -->
+<section data-title="API kataloğu" data-ch="2 · Mimari">
+  <h2>API kataloğu: arayüz ile sunucu arasındaki sözleşme</h2>
+  <p class="lead">Arayüz, sunucudan bir şey istediğinde belirli bir adrese (uç nokta) istek gönderir. Aşağıdaki liste projedeki bütün uç noktaları, hangi Python fonksiyonunun cevap verdiğini ve hangi ekranların kullandığını gösterir. Bir satıra tıklayınca kod açılır.</p>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card mth"><span class="m get">GET</span><p>Veri <b>okur</b>. Örnek: fiyat geçmişini getir.</p></div>
+    <div class="card mth"><span class="m post">POST</span><p>Yeni bir şey <b>oluşturur</b> ya da işlem başlatır. Örnek: alım emri ver.</p></div>
+    <div class="card mth"><span class="m put">PUT / PATCH</span><p>Var olan kaydı <b>günceller</b>. Örnek: alarmı düzenle.</p></div>
+    <div class="card mth"><span class="m delete">DELETE</span><p>Kaydı <b>siler</b>. Örnek: izleme listesinden çıkar.</p></div>
+  </div>
+  <div class="apibar"><input id="apiQ" placeholder="Ara: portfolio, predict, giriş, alarm…"><span id="apiCount"></span></div>
+  <div class="chips" id="apiGroups"></div>
+  <div class="card" style="padding:0;margin-top:10px"><div class="apiwrap"><table id="apiTable"></table></div></div>
+  <p style="color:var(--muted);font-size:12.5px;margin-top:8px">🔒 işaretli uç noktalar oturum jetonu (JWT) ister; jeton yoksa sunucu 401 hatası döner.</p>
+</section>
+
+<!-- 5 VERİ TOPLAMA -->
+<section data-title="Veri toplama ve önbellek" data-ch="3 · Veri">
+  <h2>Veri toplama ve önbellek</h2>
+  <p class="lead">Tüm piyasalar tek tip sembollerle Yahoo Finance'ten (<code>yfinance</code>) çekilir. Dış kaynaklar yavaş ve sınırlı olduğu için çok katmanlı önbellek kullanılır.</p>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card"><h3>🇹🇷 Borsa İstanbul</h3><p><code>THYAO.IS</code>, <code>XU100.IS</code></p></div>
+    <div class="card"><h3>🇺🇸 ABD hisseleri</h3><p><code>AAPL</code>, <code>NVDA</code>, <code>^GSPC</code></p></div>
+    <div class="card"><h3>💱 Döviz / Emtia</h3><p><code>USDTRY=X</code>, <code>GC=F</code><br>Gram altın = ons × USD/TRY ÷ 31,1</p></div>
+    <div class="card"><h3>₿ Kripto</h3><p><code>BTC-USD</code>, <code>ETH-USD</code></p></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Önbellek katmanları</h3>
+      <table>
+        <tr><th>Katman</th><th>Nerede</th><th>Süre</th></tr>
+        <tr><td>1. Bellek</td><td>Python sözlüğü (toplu fiyat tabloları)</td><td>60 saniye</td></tr>
+        <tr><td>2. Disk</td><td>SQLite <code>price_cache</code>, <code>frame_cache</code></td><td>5 dk (15dk/1sa mum) · 30 dk (günlük)</td></tr>
+        <tr><td>3. Kaynak</td><td>Yahoo Finance</td><td>önbellekte yoksa</td></tr>
+      </table>
+      <p style="margin-top:10px">Ayrıca istek "arka planda yenile" yöntemiyle çalışır: eski veri hemen gösterilir, yenisi arka planda çekilir. Böylece arayüz beklemez.</p>
+    </div>
+    <div class="card">
+      <h3>Hız sınırına karşı koruma (<code>yahoo.py</code>)</h3>
+      <p>Yahoo çok fazla istek gelince geçici olarak engeller. Uygulama bunu algılar ve süre dolana kadar yeni istek göndermez (devre kesici / circuit breaker deseni). Bu sürede önbellekteki veri gösterilir. Aynı anda gidebilecek istek sayısı da sınırlıdır.</p>
+      <h3 style="margin-top:14px">Diğer veri kaynakları</h3>
+      <ul>
+        <li><b>KAP:</b> şirket bildirimleri (kap.org.tr servisi)</li>
+        <li><b>SPK:</b> halka arz başvuruları ve haftalık bülten (PDF, <code>pypdf</code> ile okunur)</li>
+        <li><b>Google Haberler RSS:</b> varlığa özel haberler</li>
+        <li><b>ForexFactory:</b> haftalık ekonomik takvim (JSON)</li>
+        <li><b>TCMB:</b> enflasyon verisi (reel getiri hesabı)</li>
+      </ul>
+    </div>
+  </div>
+  <p><a class="code-link" href="#" data-code="backend/app/market.py" data-sym="history">Gerçek kodu aç: market.py → history()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/market.py" data-sym="_disk_load">Gerçek kodu aç: market.py → _disk_load()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/yahoo.py" data-sym="fail">Gerçek kodu aç: yahoo.py → fail()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/market.py" data-sym="_synthetic_history">Gerçek kodu aç: market.py → _synthetic_history() (gram altın)</a></p>
+  <div class="note">Yahoo'ya ulaşılamazsa (internet yok, geçici engel) veritabanındaki son kayıt, eski de olsa gösterilir; 6 saatten yeni bir kayıt varsa beklemeden gösterilip arka planda yenilenir. Gram altın ve gram gümüş ise Yahoo'da doğrudan yoktur: ons fiyatı ve USD/TRY kurundan gün gün eşleştirilerek hesaplanan "türetilmiş" sembollerdir (<code>_synthetic_history</code>).</div>
+</section>
+
+<!-- 10 VERİTABANI -->
+<section data-title="Veritabanı" data-ch="3 · Veri">
+  <h2>Veritabanı: SQLite</h2>
+  <p class="lead"><code>db.py</code>. Kurulum gerektirmeyen, tek dosyalık (<code>finans.db</code>) bir veritabanı. Şema standart SQL ile yazıldığı için PostgreSQL'e taşınabilir. Tüm kullanıcı verileri <code>user_id</code> ile ayrılır.</p>
+  <div class="dbx"><div class="card" style="padding:8px"><div id="dbDiagram"></div></div><div class="card" id="dbDetail"></div></div>
+  <div class="grid g4" id="dbgrid" hidden></div>
+  <p><a class="code-link" href="#" data-code="backend/app/db.py" data-sym="init_db">Gerçek kodu aç: db.py → init_db()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/account.py" data-sym="balances">Gerçek kodu aç: account.py → balances()</a></p>
+  <div class="say"><b>Sanal hesap mantığı:</b> Her kullanıcı 100.000 TL sanal bakiyeyle başlar. Alımlar gerçek piyasa fiyatıyla yapılır; yabancı varlıklarda işlem günündeki kurla TL'ye çevrilir, takas T+2 kuralıyla gerçekleşir. Yani gerçek bir aracı kurum hesabının davranışı taklit edilir, para riske girmez.</div>
+</section>
+
+<!-- TEKNİK GÖSTERGELER -->
+<section data-title="Teknik göstergeler" data-ch="4 · Analiz">
+  <h2>Teknik göstergeler: gerçek THYAO verisi üzerinde</h2>
+  <p class="lead">Teknik gösterge, fiyat geçmişinden hesaplanan ve "trend hangi yönde, fiyat aşırı mı yükseldi, aşırı mı düştü" gibi sorulara cevap arayan bir formüldür. Aşağıdaki grafik, uygulamanın kullandığı formüllerle THYAO'nun gerçek verisi üzerinde yeniden hesaplanıyor. Göstergeleri açıp kapatın, farenizi grafiğin üzerinde gezdirin.</p>
+  <div class="chips" id="indToggles"></div>
+  <div class="grid" style="grid-template-columns:minmax(0,1fr) 320px;align-items:start">
+    <div class="card" style="padding:10px 12px"><div id="indChart"></div><div id="indRead" class="readout">Değerleri görmek için farenizi grafiğin üzerine getirin.</div></div>
+    <div class="card" id="indExplain"></div>
+  </div>
+  <h3 style="margin-top:18px">Formüller (bir karta tıklayın)</h3>
+  <div class="grid g3" id="indis"></div>
+  <p><a class="code-link" href="#" data-code="backend/app/indicators.py" data-sym="rsi">Gerçek kodu aç: indicators.py → rsi()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/indicators.py" data-sym="macd">Gerçek kodu aç: indicators.py → macd()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/indicators.py" data-sym="bollinger">Gerçek kodu aç: indicators.py → bollinger()</a></p>
+</section>
+
+<!-- STRATEJİ TESTİ -->
+<section data-title="Strateji testi ve tarama" data-ch="4 · Analiz">
+  <h2>Strateji testi: "bu kuralla geçmişte alıp satsaydım ne olurdu?"</h2>
+  <p class="lead">Strateji testi (backtest), bir al-sat kuralını geçmiş veriye uygulayıp sonucu ölçer. Aşağıda en bilinen kural deneniyor: <b>kısa vadeli ortalama uzun vadeli ortalamanın üstündeyse hisseyi tut, altına inerse sat.</b> Kaydırıcılarla ortalama sürelerini değiştirin; sonuç anında yeniden hesaplanır.</p>
+  <div class="grid" style="grid-template-columns:300px minmax(0,1fr);align-items:start">
+    <div class="card">
+      <h3>Kuralın ayarları</h3>
+      <label class="sl">Kısa ortalama (gün): <b id="btFastV"></b><input type="range" id="btFast" min="5" max="60" value="20"></label>
+      <label class="sl">Uzun ortalama (gün): <b id="btSlowV"></b><input type="range" id="btSlow" min="20" max="200" value="50"></label>
+      <label class="sl">Komisyon: <b>%0,1</b> (her alım ve satımda)</label>
+      <div id="btStats" style="margin-top:12px"></div>
+      <p style="font-size:12.5px;margin-top:10px">Sinyal gün sonunda oluşur, işlem <b>ertesi gün</b> yapılır. Böylece "kapanış fiyatını önceden bilme" hatası (ileriye bakma) önlenir. Uygulamadaki <code>backtest.py</code> ile aynı mantık.</p>
+    </div>
+    <div class="card" style="padding:10px 12px"><div id="btChart"></div>
+      <div class="legend"><span style="color:#94a3b8">— THYAO fiyatı</span><span style="color:#38bdf8">— kısa ortalama</span><span style="color:#a78bfa">— uzun ortalama</span><span style="color:var(--acc)">▲ al</span><span style="color:var(--red)">▼ sat</span></div>
+      <div id="btEq"></div>
+      <div class="legend"><span style="color:var(--acc)">— strateji ile 10.000 ₺</span><span style="color:#94a3b8">— Al-Tut ile 10.000 ₺</span></div>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>📐 Formasyonlar</h3><p><code>patterns.py</code>: doji, çekiç, yutan boğa/ayı gibi mum formasyonlarını; yerel tepe ve diplerden destek-direnç seviyelerini bulur; günlük, haftalık ve aylık görünümü özetler.</p><a class="code-link" href="#" data-code="backend/app/patterns.py" data-sym="candle_patterns">patterns.py → candle_patterns()</a></div>
+    <div class="card"><h3>🔎 Tarama (Screener)</h3><p><code>screener.py</code>: yüzlerce hisse için RSI, ortalamalara uzaklık, kesişimler ve hacim oranını hesaplayıp 0–100 arası bileşik teknik skor üretir. "Aşırı satılmış hisseler" gibi hazır sorular buradan gelir.</p><a class="code-link" href="#" data-code="backend/app/screener.py">screener.py</a></div>
+    <div class="card"><h3>🤖 Otomatik botlar</h3><p><code>bots.py</code>: strateji testindeki kurallar sanal hesapta canlı uygulanır. Arka plan motoru dakikada bir sinyali kontrol edip gerekirse alır veya satar.</p><a class="code-link" href="#" data-code="backend/app/bots.py" data-sym="check">bots.py → check()</a></div>
+    <div class="card"><h3>📊 Nicel analiz</h3><p><code>quant.py</code>: en iyi portföy dağılımı (etkin sınır), Monte Carlo risk simülasyonu, enflasyona göre reel getiri ve "geçmişte yatırsaydım" hesabı.</p><a class="code-link" href="#" data-code="backend/app/quant.py">quant.py</a></div>
+    <div class="card"><h3>🏦 Temel analiz</h3><p><code>fundamentals.py</code>: F/K, PD/DD, F/S gibi oranlar. Finansallarını dolarla raporlayan şirketlerde (ör. THY) oranlar TL'ye çevrilerek yeniden hesaplanır.</p><a class="code-link" href="#" data-code="backend/app/fundamentals.py">fundamentals.py</a></div>
+    <div class="card"><h3>🧪 Diğer stratejiler</h3><p>RSI aşırı alım/satım, MACD kesişimi, Bollinger geri dönüşü ve Al-Tut. Altı varlıktaki sonuçları "Deney sonuçları" slaytında.</p><a class="code-link" href="#" data-code="backend/app/backtest.py" data-sym="run">backtest.py → run()</a></div>
+  </div>
+</section>
+
+<!-- 7 YZ TAHMİN -->
+<section data-title="Yapay zekâ: fiyat tahmini" data-ch="5 · Yapay zekâ">
+  <h2>Yapay zekâ: ertesi gün fiyat tahmini</h2>
+  <p class="lead"><code>ml.py</code> ve <code>seq_models.py</code>. Amaç: yarın fiyat <b>yükselecek mi düşecek mi</b> (sınıflandırma) ve <b>yüzde kaç değişecek</b> (regresyon). Modeller her istekte o varlığın verisiyle yeniden eğitilir.</p>
+  <div class="pipe">
+    <div class="card"><div class="ic">📥</div><b>Ham veri</b><p>~2 yıllık günlük mum (OHLCV)</p></div><div class="sep">→</div>
+    <div class="card"><div class="ic">🧮</div><b>Öznitelikler</b><p>13 teknik öznitelik</p></div><div class="sep">→</div>
+    <div class="card"><div class="ic">✂️</div><b>Zaman sıralı ayrım</b><p>%80 eğitim · %20 test</p></div><div class="sep">→</div>
+    <div class="card"><div class="ic">🏋️</div><b>Eğitim</b><p>6 model + naif referans</p></div><div class="sep">→</div>
+    <div class="card"><div class="ic">📏</div><b>Değerlendirme</b><p>Yön doğruluğu · MAE · RMSE</p></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Öznitelikler (üzerine gelin)</h3>
+      <div class="feat" id="feats"></div>
+      <h3 style="margin-top:14px">Neden karıştırılmadan ayrılıyor?</h3>
+      <div class="split"><div class="tr">Eğitim (geçmiş) %80</div><div class="te">Test %20</div></div>
+      <p>Finansal veride rastgele bölme yapılırsa model "geleceği görerek" eğitilir (veri sızıntısı) ve başarı yapay olarak yüksek çıkar. Bu yüzden test seti her zaman en son günlerdir.</p>
+      <p style="margin-top:8px">Hedef değişken: <code>target_ret = getiri.shift(-1)</code>, yani yarının getirisi.</p>
+      <a class="code-link" href="#" data-code="backend/app/ml.py" data-sym="build_features">Gerçek kodu aç: ml.py → build_features()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/ml.py" data-sym="predict">Gerçek kodu aç: ml.py → predict()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/seq_models.py" data-sym="arima">Gerçek kodu aç: seq_models.py → arima()</a>
+    </div>
+    <div>
+      <div class="models" id="models"></div>
+      <div class="card" id="modelInfo" style="margin-top:10px"><p>Bir modele tıklayın.</p></div>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Gerçek veriyle: THYAO'nun 2 yılı nasıl bölündü?</h3><div id="splitChart"></div><p id="splitText" style="font-size:13px;margin-top:6px"></p></div>
+    <div class="card"><h3 id="featTitle">Modelin gördüğü 13 sayı (son işlem günü)</h3><div class="apiwrap" style="max-height:300px"><table id="featToday"></table></div></div>
+  </div>
+  <div class="say"><b>Hocaya vurgulanacak nokta:</b> Her model, "fiyat değişmez / yön bugünkü gibi olur" diyen <b>naif modelle</b> kıyaslanır. Naif modeli geçemeyen bir model gerçekte bir şey öğrenmemiş demektir. Bu dürüst bir değerlendirme yöntemidir.</div>
+</section>
+
+<!-- MODELLER -->
+<section data-title="Modeller nasıl öğrenir?" data-ch="5 · Yapay zekâ">
+  <h2>Modeller nasıl öğrenir? (matematiksiz anlatım)</h2>
+  <p class="lead">Projede altı farklı yöntem yarışıyor. Hepsi aynı soruyu cevaplamaya çalışır: <b>"Bugünkü 13 göstergeye bakarak yarın fiyat yükselir mi?"</b> Farkları, bu soruya nasıl cevap aradıklarıdır. Bir model seçin.</p>
+  <div class="atabs" id="mlTabs"></div>
+  <div class="grid" style="grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:start">
+    <div class="card"><div id="mlSvg"></div></div>
+    <div class="card" id="mlText"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Ortak kavramlar</h3>
+    <div class="grid g3">
+      <div><b>Eğitim</b><p>Model geçmiş günleri görür: "o gün göstergeler böyleydi, ertesi gün fiyat yükseldi". Binlerce örnekten bir kural çıkarır.</p></div>
+      <div><b>Aşırı öğrenme (ezberleme)</b><p>Model geçmişi ezberlerse yeni günlerde başarısız olur. Ağaç derinliğini sınırlamak, erken durdurma ve düzenlileştirme bunu önlemek için kullanıldı.</p></div>
+      <div><b>İki görev</b><p>Her model iki kez eğitilir: biri <b>yön</b> (yükselir/düşer, sınıflandırma), diğeri <b>yüzde değişim</b> (regresyon) tahmini için.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- DENEY SONUÇLARI -->
+<section data-title="Deney sonuçları" data-ch="5 · Yapay zekâ" id="resSec">
+  <h2>Deney sonuçları (gerçek veri)</h2>
+  <p class="lead" id="resLead">Projenin kendi kodu (<code>ml.py</code>, <code>backtest.py</code>) uygulamadaki varsayılan ayarlarla, 6 farklı varlığın son 2 yıllık gerçek verisi üzerinde çalıştırıldı.</p>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Tüm varlıklarda özet: en iyi model, naif modeli geçebildi mi?</h3>
+    <table id="resSum"></table>
+    <p style="font-size:12px;margin-top:6px">± değeri, test gün sayısına göre hesaplanan %95 güven aralığıdır (1,96·√(p(1−p)/n)). Aralık geniş olduğu için birkaç puanlık farklar istatistiksel olarak kesin değildir.</p>
+  </div>
+  <div class="atabs" id="atabs"></div>
+  <div class="grid g2">
+    <div class="card"><h3 id="resT1">Yön doğruluğu (test dönemi)</h3><div id="resBars"></div>
+      <div class="legend"><span><i></i>naif model</span><span><i class="h"></i>%50 (yazı-tura)</span><span style="color:var(--acc)">■ seçilen model</span></div></div>
+    <div class="card"><h3>Gerçek ve tahmin edilen fiyat (test dönemi, seçilen model)</h3><div id="resChart"></div>
+      <div class="legend"><span style="color:#94a3b8">— gerçek</span><span style="color:var(--warn)">— tahmin</span></div>
+      <p style="font-size:12px;margin-top:6px">Dikkat: tahmin edilen fiyat, bir önceki günün gerçek fiyatına tahmin edilen getirinin eklenmesiyle bulunur. Bu yüzden iki eğri doğal olarak üst üste biner; modelin başarısını eğrilerin yakınlığı değil, soldaki yön doğruluğu ve naif modele göre fark gösterir.</p></div>
+    <div class="card"><h3>Öznitelik önemleri (Rastgele Orman)</h3><div id="resImp"></div></div>
+    <div class="card"><h3>Strateji testi (10.000 başlangıç, %0,1 komisyon)</h3><table id="resBt"></table></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>📌 Bulgular</h3><div id="findings"></div></div>
+</section>
+
+<!-- 8 LLM -->
+<section data-title="LLM asistanı ve duygu analizi" data-ch="5 · Yapay zekâ">
+  <h2>Büyük dil modeli (LLM) entegrasyonu</h2>
+  <p class="lead">Anthropic <b>Claude API</b> kullanılır. Önemli tasarım kararı: <b>API anahtarı yoksa her özellik kural tabanlı olarak yine çalışır.</b> Uygulama hiçbir zaman LLM'e mecbur değildir.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>💬 Analiz asistanı (<code>assistant.py</code>)</h3>
+      <p>Kullanıcının sorusu, seçili varlığın <b>gerçek verileriyle</b> (fiyat, göstergeler, sinyaller, tahmin) birlikte modele gönderilir. Böylece model uydurmak yerine verilen sayılar üzerinden yorum yapar (bağlam ekleme / grounding).</p>
+      <pre><span class="c"># sadeleştirilmiş</span>
+<span class="k">if not</span> <span class="f">api_key</span>():
+    <span class="k">return</span> <span class="f">rule_based</span>(context)   <span class="c"># kural tabanlı Türkçe yanıt</span>
+client.messages.<span class="f">create</span>(
+    model=<span class="s">"claude-sonnet-5-5"</span>,
+    system=SYSTEM_PROMPT,          <span class="c"># "yatırım tavsiyesi verme" vb.</span>
+    messages=history + [{<span class="s">"role"</span>: <span class="s">"user"</span>,
+              <span class="s">"content"</span>: <span class="f">json</span>(context) + question}])</pre>
+      <a class="code-link" href="#" data-code="backend/app/assistant.py" data-sym="ask">Gerçek kodu aç: assistant.py → ask()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/assistant.py" data-sym="rule_based">Gerçek kodu aç: assistant.py → rule_based()</a>
+    </div>
+    <div class="card">
+      <h3>📰 Haber duygu analizi (<code>news.py</code>)</h3>
+      <p>Google Haberler RSS'ten başlıklar çekilir ve her biri <b>olumlu / olumsuz / nötr</b> olarak etiketlenir.</p>
+      <ul>
+        <li><b>LLM varsa:</b> başlıklar toplu olarak Claude'a gönderilir, skor döner.</li>
+        <li><b>LLM yoksa:</b> Türkçe finans sözlüğü ile anahtar kelime sayımı ("rekor", "zirve", "temettü" ↔ "zarar", "düşüş", "iflas").</li>
+      </ul>
+      <div class="demo" style="margin-top:12px"><input id="newsIn" value="THY rekor kâr açıkladı, temettü dağıtacak"><button class="btn" id="newsBtn">Sözlükle analiz et</button></div>
+      <div class="hash" id="newsOut"></div>
+      <a class="code-link" href="#" data-code="backend/app/news.py" data-sym="lexicon_sentiment">Gerçek kodu aç: news.py → lexicon_sentiment()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/news.py" data-sym="llm_sentiment">Gerçek kodu aç: news.py → llm_sentiment()</a>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>📝 Günlük bülten</h3><p><code>bulletin.py</code>: günün piyasa özetini LLM yazar; yoksa şablonla oluşturulur.</p></div>
+    <div class="card"><h3>📈 Grafik yorumlayıcı</h3><p><code>ai_tools.py</code>: göstergeleri sade Türkçe ile yorumlar.</p></div>
+    <div class="card"><h3>🗣️ Doğal dille tarama</h3><p>"RSI'ı 30'un altındaki bankalar" gibi bir cümle tarama filtrelerine çevrilir.</p></div>
+  </div>
+</section>
+
+<!-- SANAL HESAP -->
+<section data-title="Sanal hesap ve emirler" data-ch="6 · Kullanıcı ve sistem">
+  <h2>Sanal hesap, emirler ve takas</h2>
+  <p class="lead">Kullanıcı gerçek para riske atmadan, gerçek piyasa fiyatlarıyla alım satım yapar. Sanal hesap, Türkiye'deki bir aracı kurum hesabının kurallarını taklit edecek şekilde tasarlandı.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>💰 Takas (T+2) nedir?</h3>
+      <p>Borsada hisse aldığınızda para hesabınızdan hemen değil, <b>iki iş günü sonra</b> kesin olarak çıkar. Uygulama da böyle çalışır:</p>
+      <div class="tl" id="tl"></div>
+      <ul>
+        <li><b>Borsa İstanbul:</b> T+2 · <b>ABD hisseleri:</b> T+1 · <b>Döviz, emtia, kripto:</b> anında (T+0)</li>
+        <li>Hafta sonları sayılmaz. <b>Alım gücü</b> = T2 bakiyesi (Türk aracı kurumlarındaki gibi).</li>
+        <li>Yabancı varlıklar işlem günündeki kurla TL'ye çevrilir.</li>
+      </ul>
+      <a class="code-link" href="#" data-code="backend/app/account.py" data-sym="balances">account.py → balances()</a>
+    </div>
+    <div class="card">
+      <h3>📋 Bekleyen emirler</h3>
+      <p>Kullanıcı "fiyat şu seviyeye gelince işlem yap" diyebilir. Arka plan motoru dakikada bir fiyatı kontrol eder. <button class="btn" id="ordPlay" style="padding:3px 10px;margin-left:4px">▶ Canlandır</button></p>
+      <div id="ordChart"></div>
+      <div id="ordLog" class="ordlog"></div>
+      <a class="code-link" href="#" data-code="backend/app/orders.py" data-sym="check">orders.py → check()</a>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card"><h3>🟢 Limit alış</h3><p>"Fiyat bu seviyeye <b>inince</b> al." Emir bekledikçe tutarı kadar alım gücü bloke edilir.</p></div>
+    <div class="card"><h3>🔴 Zarar durdur</h3><p>"Fiyat bu seviyeye <b>düşerse</b> sat." Kaybı sınırlamak için.</p></div>
+    <div class="card"><h3>🟡 Kâr al</h3><p>"Fiyat bu seviyeye <b>çıkarsa</b> sat." Kârı garantilemek için.</p></div>
+    <div class="card"><h3>📒 İşlem günlüğü</h3><p>Her işleme neden ve duygu notu eklenebilir; aylık karne ve rozetler bu kayıtlardan hesaplanır.</p></div>
+  </div>
+</section>
+
+<!-- 9 ARKA PLAN MOTORU -->
+<section data-title="Arka plan motoru" data-ch="6 · Kullanıcı ve sistem" id="engineSec">
+  <h2>Arka plan motoru (<code>engine.py</code>)</h2>
+  <p class="lead">Kullanıcı ekrana bakmasa da çalışması gereken işler için ayrı bir iş parçacığı dakikada bir <code>tick()</code> çalıştırır. Her görev kendi <code>try/except</code> bloğundadır; biri hata verse de diğerleri çalışır.</p>
+  <div class="clock">
+    <div class="ring">
+      <svg width="220" height="220"><circle cx="110" cy="110" r="96" stroke="#24324f" stroke-width="12" fill="none"/><circle id="ringc" cx="110" cy="110" r="96" stroke="url(#gr)" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="603" stroke-dashoffset="603"/><defs><linearGradient id="gr"><stop offset="0" stop-color="#22c55e"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs></svg>
+      <div class="ctr"><div><b id="tickN">0</b><span>tick (simülasyon:<br>1 sn = 1 dk)</span></div></div>
+    </div>
+    <div id="tasks">
+      <div class="task" data-every="1"><span class="dot"></span>Bekleyen emirler (limit, zarar durdur, kâr al)<span class="when">her dakika</span></div>
+      <div class="task" data-every="1"><span class="dot"></span>Strateji botları sinyal kontrolü<span class="when">her dakika</span></div>
+      <div class="task" data-every="1"><span class="dot"></span>Fiyat alarmları → bildirim + Windows bildirimi<span class="when">her dakika</span></div>
+      <div class="task" data-every="1"><span class="dot"></span>Takas (T+2) tamamlananlar, günlük hesap değeri, rozetler<span class="when">her dakika</span></div>
+      <div class="task" data-every="10"><span class="dot"></span>Akıllı uyarılar, tahmin oyunu, haftalık rapor, misafir temizliği<span class="when">~10 dakikada bir</span></div>
+      <div class="task" data-every="30"><span class="dot"></span>SPK halka arz ve sermaye artırımı senkronu<span class="when">~30 dakikada bir</span></div>
+    </div>
+  </div>
+  <p><a class="code-link" href="#" data-code="backend/app/engine.py" data-sym="tick">Gerçek kodu aç: engine.py → tick()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/orders.py" data-sym="check">Gerçek kodu aç: orders.py → check()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/bots.py" data-sym="check">Gerçek kodu aç: bots.py → check()</a></p>
+  <div class="note">Web sürümünde birden fazla sunucu olacağı için bu motorun Celery / RQ gibi ayrı bir iş kuyruğuna taşınması gerekir. Masaüstünde tek süreç yeterlidir.</div>
+</section>
+
+<!-- BİLDİRİM, RAPOR, EĞİTİM -->
+<section data-title="Bildirim, rapor ve eğitim" data-ch="6 · Kullanıcı ve sistem">
+  <h2>Bildirimler, raporlar, yedekleme ve eğitim modülleri</h2>
+  <p class="lead">Analizin dışında, uygulamayı günlük kullanımda faydalı kılan yardımcı sistemler.</p>
+  <div class="grid g3">
+    <div class="card"><h3>🔔 Bildirim merkezi</h3><p>Alarmlar, gerçekleşen emirler, bot işlemleri, takaslar ve rozetler tek bir listede toplanır. Uygulama arka plandayken <b>Windows bildirimi</b> olarak da gösterilir; bildirime tıklamak ilgili sayfayı açar.</p><a class="code-link" href="#" data-code="backend/app/notifications.py">notifications.py</a> <a class="code-link" href="#" data-code="backend/desktop_notify.py">desktop_notify.py</a></div>
+    <div class="card"><h3>📨 Telegram</h3><p>İsteğe bağlı: kullanıcı kendi Telegram botunu tanımlarsa alarmlar ve haftalık rapor telefonuna da gönderilir.</p><a class="code-link" href="#" data-code="backend/app/alerts.py" data-sym="send_telegram">alerts.py → send_telegram()</a></div>
+    <div class="card"><h3>📄 Excel ve PDF raporları</h3><p>Portföy, teknik analiz ve tarama sonuçları <code>openpyxl</code> ile Excel'e, <code>reportlab</code> ile PDF'e aktarılır ve İndirilenler klasörüne kaydedilir.</p><a class="code-link" href="#" data-code="backend/app/export.py">export.py</a></div>
+    <div class="card"><h3>🗓️ Haftalık kişisel rapor</h3><p>Her pazartesi arka plan motoru, kullanıcının haftalık performansını özetleyen bir rapor üretir (LLM varsa Claude yazar, yoksa kural tabanlı).</p><a class="code-link" href="#" data-code="backend/app/engine.py" data-sym="_weekly_reports">engine.py → _weekly_reports()</a></div>
+    <div class="card"><h3>💾 Yedekleme</h3><p>Kullanıcının işlemleri, nakit hareketleri, alarmları, emirleri, botları ve rozetleri tek bir JSON dosyasına yedeklenip başka bir bilgisayarda geri yüklenebilir.</p><a class="code-link" href="#" data-code="backend/app/backup.py">backup.py</a></div>
+    <div class="card"><h3>🪟 Sistem tepsisi ve mini pencere</h3><p>Pencere kapatılınca uygulama tepside çalışmaya devam eder ve alarmları izler. Mini pencere, seçili fiyatları her zaman üstte küçük bir kutuda gösterir.</p><a class="code-link" href="#" data-code="backend/desktop_app.py" data-sym="main">desktop_app.py → main()</a></div>
+    <div class="card"><h3>🎓 Yatırım akademisi</h3><p>Kısa dersler ve mini testlerle borsa temelleri; ilerleme veritabanında tutulur.</p><a class="code-link" href="#" data-code="backend/app/academy.py">academy.py</a></div>
+    <div class="card"><h3>🎯 Tahmin oyunu</h3><p>Kullanıcı haftalık olarak "yükselir/düşer" tahmini yapar; hafta sonunda gerçek fiyatla karşılaştırılıp puan verilir.</p><a class="code-link" href="#" data-code="backend/app/academy.py" data-sym="resolve">academy.py → resolve()</a></div>
+    <div class="card"><h3>🏅 Rozetler ve karne</h3><p>"İlk Adım", "İlk Kâr", "Çeşitlendirici", "Dünya Vatandaşı", "Otomasyon Ustası" gibi rozetler ve aylık performans karnesi ile oyunlaştırma.</p><a class="code-link" href="#" data-code="backend/app/insights.py" data-sym="badges">insights.py → badges()</a></div>
+  </div>
+</section>
+
+<!-- 11 GÜVENLİK -->
+<section data-title="Kimlik doğrulama ve güvenlik" data-ch="6 · Kullanıcı ve sistem">
+  <h2>Kimlik doğrulama ve güvenlik (<code>auth.py</code>)</h2>
+  <p class="lead">Şifreler hiçbir zaman açık metin olarak saklanmaz. Oturum, sunucuda tutulmayan imzalı bir jeton (JWT) ile yönetilir.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>1) Şifre özeti: PBKDF2-HMAC-SHA256</h3>
+      <p>Her kullanıcıya rastgele bir <b>tuz</b> (salt) üretilir ve şifre <b>200.000 kez</b> özetlenir. Bu, kaba kuvvet saldırısını çok yavaşlatır. Aynı şifreye sahip iki kullanıcının özeti farklı olur.</p>
+      <div class="demo" style="margin-top:12px"><input id="pw" value="demo123" type="text"><button class="btn" id="pwBtn">Özetle (tarayıcıda)</button></div>
+      <div class="hash" id="pwOut"></div>
+      <a class="code-link" href="#" data-code="backend/app/auth.py" data-sym="hash_password">Gerçek kodu aç: auth.py → hash_password()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/auth.py" data-sym="login">Gerçek kodu aç: auth.py → login()</a>
+      <p style="font-size:12px;margin-top:6px">Veritabanında yalnızca <code>tuz$özet</code> saklanır. Bu demo gerçekten tarayıcının Web Crypto API'si ile 200.000 tur hesaplar.</p>
+    </div>
+    <div class="card">
+      <h3>2) JWT oturum jetonu (HS256)</h3>
+      <p>Giriş başarılı olunca sunucu imzalı bir jeton üretir. Arayüz her istekte bunu <code>Authorization: Bearer …</code> başlığıyla gönderir. FastAPI'deki <code>Depends(current_user)</code> imzayı ve süreyi doğrular.</p>
+      <div class="jwt" style="margin-top:10px"><span class="h">eyJhbGciOiJIUzI1NiJ9</span>.<span class="p">eyJzdWIiOiIxIiwibmFtZSI6ImRlbW8iLCJ2ZXIiOjAsImV4cCI6...</span>.<span class="s">kX9f2...imza</span></div>
+      <table style="margin-top:8px">
+        <tr><td><span style="color:#f87171">başlık</span></td><td>algoritma: HS256</td></tr>
+        <tr><td><span style="color:#c084fc">yük</span></td><td><code>sub</code> kullanıcı no, <code>ver</code> jeton sürümü, <code>guest</code>, <code>exp</code> bitiş</td></tr>
+        <tr><td><span style="color:#38bdf8">imza</span></td><td>yerel <code>secret.key</code> ile HMAC</td></tr>
+      </table>
+      <a class="code-link" href="#" data-code="backend/app/auth.py" data-sym="create_token">Gerçek kodu aç: auth.py → create_token()</a> &nbsp; <a class="code-link" href="#" data-code="backend/app/auth.py" data-sym="current_user">Gerçek kodu aç: auth.py → current_user()</a>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card"><h3>🔒 Hesap kilitleme</h3><p>5 hatalı denemede hesap 5 dakika kilitlenir (HTTP 429).</p></div>
+    <div class="card"><h3>🚪 Tüm oturumları kapat</h3><p><code>token_version</code> artırılınca eski jetonların hepsi geçersiz olur.</p></div>
+    <div class="card"><h3>🔑 Kurtarma kodu</h3><p>E-posta sunucusu olmadan şifre sıfırlama; kod da özetlenerek saklanır.</p></div>
+    <div class="card"><h3>👤 Misafir hesabı</h3><p>7 günlük jeton, sonradan gerçek hesaba yükseltilebilir; süresi dolanlar otomatik silinir.</p></div>
+  </div>
+  <div class="note">Sunucu yalnızca <code>127.0.0.1</code> üzerinde dinler; aynı ağdaki başka bir bilgisayar varsayılan olarak erişemez. CORS yalnızca geliştirme adresine (<code>localhost:5173</code>) izin verir. Giriş verileri Pydantic modelleriyle doğrulanır.</div>
+</section>
+
+<!-- 12 ARAYÜZ -->
+<section data-title="Arayüz (React)" data-ch="6 · Kullanıcı ve sistem">
+  <h2>Arayüz: React + TypeScript</h2>
+  <p class="lead"><code>frontend/src/</code>. Vite ile derlenen tek sayfa uygulaması (SPA). Sayfa geçişlerinde sunucudan yeni HTML gelmez; yalnızca JSON veri istenir.</p>
+  <div class="grid g3">
+    <div class="card"><h3>🧭 Yönlendirme</h3><p><code>react-router-dom</code> ile 29 sayfa: Piyasa Özeti, Teknik Analiz, YZ Tahmin, Portföy, KAP, Halka Arz, Strateji Testi, Botlar, Akademi…</p></div>
+    <div class="card"><h3>📈 Grafikler</h3><p>TradingView'in açık kaynak <b>Lightweight Charts</b> kütüphanesi: mum grafiği, hacim, SMA/EMA, Bollinger, RSI ve MACD panelleri.</p></div>
+    <div class="card"><h3>🔌 API katmanı</h3><p><code>api.ts</code>: tüm istekler tek fonksiyondan geçer, JWT'yi ekler, 401 gelirse oturumu kapatır, hataları Türkçe mesaja çevirir.</p></div>
+    <div class="card"><h3>📱 Duyarlı tasarım</h3><p>900 piksel altında yan menü çekmeceye dönüşür; telefon ve tablette çalışır.</p></div>
+    <div class="card"><h3>🎨 Tema</h3><p>CSS değişkenleri ile açık / koyu tema; tercihler kullanıcı başına sunucuda saklanır.</p></div>
+    <div class="card"><h3>⚡ Kullanım kolaylığı</h3><p>Ctrl+K hızlı arama, favoriler, otomatik yenileme, terim açıklamaları (finans sözlüğü ipuçları).</p></div>
+  </div>
+  <pre><span class="c">// frontend/src/api.ts (sadeleştirilmiş)</span>
+<span class="k">export async function</span> <span class="f">api</span>&lt;T&gt;(path: <span class="k">string</span>, opts: RequestInit = {}): Promise&lt;T&gt; {
+  <span class="k">const</span> res = <span class="k">await</span> <span class="f">fetch</span>(<span class="s">`/api${path}`</span>, {
+    ...opts,
+    headers: { <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>, Authorization: <span class="s">`Bearer ${token()}`</span> },
+  });
+  <span class="k">if</span> (res.status === <span class="n">401</span>) <span class="f">logout</span>();
+  <span class="k">if</span> (!res.ok) <span class="k">throw new</span> <span class="f">Error</span>((<span class="k">await</span> res.<span class="f">json</span>()).detail);
+  <span class="k">return</span> res.<span class="f">json</span>();
+}</pre>
+  <a class="code-link" href="#" data-code="frontend/src/api.ts" data-sym="api">Gerçek kodu aç: api.ts → api()</a> &nbsp; <a class="code-link" href="#" data-code="frontend/src/App.tsx" data-sym="App">Gerçek kodu aç: App.tsx → App()</a>
+</section>
+
+<!-- 13 TEKNOLOJİLER -->
+<section data-title="Kullanılan teknolojiler" data-ch="7 · Teslim">
+  <h2>Kullanılan teknolojiler</h2>
+  <p class="lead">Tamamı açık kaynak / ücretsiz araçlar. Yalnızca Claude API isteğe bağlı ve ücretlidir.</p>
+  <div class="tech" id="tech"></div>
+</section>
+
+<!-- 14 PAKETLEME -->
+<section data-title="Paketleme (exe oluşturma)" data-ch="7 · Teslim">
+  <h2>Paketleme: kaynak koddan exe'ye</h2>
+  <p class="lead"><code>exe_olustur.bat</code> tek tıkla aşağıdaki adımları çalıştırır. Sonuç: Python veya Node.js kurulu olmayan bir bilgisayarda çalışan <code>Uygulama\TradeMetrix.exe</code>.</p>
+  <div class="build">
+    <div class="card"><div class="ic">📦</div><h3>1. Bağımlılıklar</h3><p><code>pip install -r requirements.txt pyinstaller</code></p></div>
+    <div class="card"><div class="ic">⚛️</div><h3>2. Arayüz derlemesi</h3><p><code>npm run build</code> → Vite, TypeScript/React kodunu küçültülmüş JS/CSS'e çevirir (<code>frontend/dist</code>).</p></div>
+    <div class="card"><div class="ic">🐍</div><h3>3. PyInstaller</h3><p>Python yorumlayıcısı, kütüphaneler, derlenmiş arayüz ve veri dosyaları tek klasörde paketlenir.</p></div>
+    <div class="card"><div class="ic">🚀</div><h3>4. Dağıtım</h3><p><code>robocopy</code> ile <code>Uygulama</code> klasörü güncellenir.</p></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Boyutu küçük tutmak için</h3><p>PyTorch (LSTM için) pakete dahil edilmez: testlerde diğer modellerden daha başarılı olmadığı hâlde uygulamayı ~420 MB büyütüyordu. LSTM, PyTorch kuruluysa kaynak koddan çalıştırıldığında devreye girer. <code>matplotlib</code> ve <code>IPython</code> da dışarıda bırakılır.</p></div>
+    <div class="card"><h3>Çalıştırma yolları</h3><ul>
+      <li><b>Exe:</b> <code>Uygulama\TradeMetrix.exe</code></li>
+      <li><b>Kaynak koddan:</b> <code>baslat.bat</code> (Python 3.11+, Node 18+)</li>
+      <li><b>Geliştirme:</b> API <code>:8765</code> (Swagger belgesi <code>/docs</code>) + Vite <code>:5173</code> canlı yenileme</li>
+      <li><b>Ağda web sürümü:</b> <code>run_desktop.py --web</code></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ZORLUKLAR -->
+<section data-title="Zorluklar ve çözümler" data-ch="7 · Teslim">
+  <h2>Geliştirirken karşılaşılan zorluklar ve çözümleri</h2>
+  <p class="lead">Bir projenin en öğretici kısmı, yolda çıkan sorunlardır. Aşağıdakilerin her biri gerçek bir sorundu ve çözümü kodda duruyor.</p>
+  <div class="grid g2" id="chal"></div>
+</section>
+
+<!-- SONUÇ -->
+<section data-title="Sonuç ve değerlendirme" data-ch="7 · Teslim">
+  <h2>Sonuç, sınırlılıklar ve gelecek çalışmalar</h2>
+  <p class="lead">Projenin neyi başardığı, nerede sınırlı kaldığı ve nasıl geliştirilebileceği.</p>
+  <div class="grid g3">
+    <div class="card">
+      <h3>✅ Elde edilenler</h3>
+      <ul>
+        <li>Kurulum gerektirmeyen, tek tıkla açılan çalışır bir masaüstü uygulaması</li>
+        <li>4 piyasa + KAP, SPK, haber ve ekonomik takvim tek platformda</li>
+        <li>6 modelin naif referansla şeffaf karşılaştırması</li>
+        <li id="concl1">Deneylerde en iyi model varlıkların çoğunda naif modeli geçti</li>
+        <li>Sanal hesap, emirler, botlar ve strateji testiyle risksiz pratik</li>
+        <li>LLM olmadan da çalışan, LLM ile zenginleşen tasarım</li>
+        <li>Web'e taşınabilir istemci–sunucu mimarisi</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>⚠️ Sınırlılıklar</h3>
+      <ul>
+        <li><b>Küçük test kümesi:</b> ~90 gün; güven aralığı yaklaşık ±%10. Birkaç puanlık farklar kesin değildir.</li>
+        <li><b>Model seçimi test kümesinde yapılıyor:</b> En iyi model test verisine göre seçildiği için raporlanan doğruluk biraz iyimserdir.</li>
+        <li><b>Yalnızca fiyat tabanlı öznitelikler:</b> Haber, makro veri ve bilanço modele girmiyor.</li>
+        <li><b>Veri:</b> Yahoo verisi ~15 dk gecikmeli ve kişisel kullanım lisanslı.</li>
+        <li><b>Geri test:</b> Yalnızca alım yönlü; kayma (slippage) ve vergi hesaba katılmıyor.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🚀 Gelecek çalışmalar</h3>
+      <ul>
+        <li><b>Kayan pencere (walk-forward) doğrulama:</b> eğitim/doğrulama/test üçlü ayrımı ile daha güvenilir ölçüm</li>
+        <li><b>Haber duygu skorunu öznitelik yapmak</b> (zaten hesaplanıyor)</li>
+        <li><b>Açıklanabilirlik:</b> SHAP ile tahmin bazında öznitelik katkısı</li>
+        <li><b>Web sürümü:</b> PostgreSQL, Celery, HTTPS</li>
+        <li><b>Mobil uygulama</b> (arayüz zaten duyarlı)</li>
+        <li>Lisanslı, gerçek zamanlı veri sağlayıcısı</li>
+      </ul>
+    </div>
+  </div>
+  <div class="say"><b>Sunarken:</b> Sınırlılıkları kendin söylemen güçlü bir izlenim bırakır. "Modelim %58 doğru" yerine "test kümesi küçük olduğu için bu farkın güven aralığı geniş; bu yüzden her modeli naif referansla kıyaslıyorum ve bir sonraki adım kayan pencere doğrulaması" demek, yöntemi bildiğini gösterir.</div>
+</section>
+
+<!-- 15 WEB'E GEÇİŞ -->
+<section data-title="Web sürümüne geçiş" data-ch="7 · Teslim">
+  <h2>Neden istemci–sunucu? Web sürümüne geçiş</h2>
+  <p class="lead">Masaüstü uygulaması bilinçli olarak bir web uygulaması gibi tasarlandı. Arayüz verilerini göreli <code>/api</code> adreslerinden aldığı için aynı kod bir sunucuya konunca web sitesi olarak çalışır.</p>
+  <table class="card" style="padding:0">
+    <tr><th>Konu</th><th>Masaüstü (şimdi)</th><th>Web (gelecek)</th></tr>
+    <tr><td>Veritabanı</td><td>SQLite (tek dosya)</td><td>PostgreSQL, yalnızca <code>db.py</code> bağlantısı değişir</td></tr>
+    <tr><td>Güvenlik</td><td>Yalnızca 127.0.0.1</td><td>HTTPS, hız sınırlama, CORS alan adına göre</td></tr>
+    <tr><td>Arka plan işleri</td><td>Tek iş parçacığı (<code>engine.py</code>)</td><td>Celery / RQ iş kuyruğu</td></tr>
+    <tr><td>Veri lisansı</td><td>Yahoo, Google Haberler (kişisel kullanım)</td><td>Lisanslı veri sağlayıcı</td></tr>
+    <tr><td>Masaüstüne özel</td><td>Sistem tepsisi, mini pencere, Windows bildirimi</td><td>Tarayıcı bildirimi, ayrı pencere</td></tr>
+  </table>
+  <h3 style="margin-top:24px">Hocanın sorabileceği sorular</h3>
+  <div class="qa">
+    <details><summary>Tahmin modeli ne kadar başarılı?</summary><p>Ertesi gün yönü tahmini doğası gereği zordur (piyasa etkinliği). Yön doğruluğu genelde %50'nin biraz üzerindedir; bu yüzden her model naif referansla kıyaslanır ve sonuçlar kullanıcıya şeffaf biçimde MAE/RMSE ile gösterilir. Uygulama yatırım tavsiyesi vermez, eğitim amaçlıdır.</p></details>
+    <details><summary>Neden LSTM pakette yok?</summary><p>Denendi; bu veri boyutunda (birkaç yüz gün) ağaç tabanlı modellerden daha iyi sonuç vermedi ve PyTorch exe'yi ~420 MB büyütüyordu. Kod duruyor, PyTorch kuruluysa otomatik devreye giriyor.</p></details>
+    <details><summary>Veri gerçek zamanlı mı?</summary><p>Yahoo Finance verisi BIST için ~15 dakika gecikmelidir. Önbellek süresi gün içi mumlarda 5 dakika, günlük mumlarda 30 dakikadır.</p></details>
+    <details><summary>Neden Flask/Django değil de FastAPI?</summary><p>FastAPI otomatik veri doğrulama (Pydantic), otomatik API belgesi (Swagger <code>/docs</code>), asenkron destek ve tip ipuçlarıyla daha az kod sunar. 128 uç noktanın belgesi otomatik oluşur.</p></details>
+    <details><summary>Neden Electron değil de pywebview?</summary><p>Electron her uygulamaya ayrı bir Chromium gömer (~150 MB+). pywebview Windows'ta zaten yüklü olan WebView2'yi kullanır ve arka uç Python'da olduğu için tek dil yeterli olur.</p></details>
+    <details><summary>Şifreler nasıl korunuyor?</summary><p>PBKDF2-HMAC-SHA256, kullanıcıya özel tuz ve 200.000 tur. Veritabanı çalınsa bile şifreler doğrudan okunamaz. Oturumlar imzalı JWT ile yönetilir, 5 hatalı denemede hesap kilitlenir.</p></details>
+  </div>
+  <p style="color:var(--muted);margin-top:20px;font-size:13px">Platform yalnızca eğitim ve bilgilendirme amaçlıdır, yatırım tavsiyesi vermez.</p>
+</section>
+
+<!-- SÖZLÜK -->
+<section data-title="Sözlük" data-ch="7 · Teslim">
+  <h2>Sözlük: sunumda geçen terimler</h2>
+  <p class="lead">Sunum boyunca altı noktalı çizgili kelimelerin üzerine gelince kısa açıklaması çıkar. Hepsi burada da toplu olarak duruyor.</p>
+  <div class="apibar"><input id="glQ" placeholder="Terim ara: JWT, önbellek, RSI, aşırı öğrenme…"><span id="glCount"></span></div>
+  <div class="chips" id="glCats"></div>
+  <div class="glgrid" id="glList"></div>
+</section>
+
+<!-- 16 KAYNAK KOD -->
+<section data-title="Kaynak kod gezgini" data-ch="7 · Teslim" id="codeSec">
+  <h2>Kaynak kod gezgini</h2>
+  <p class="lead" id="codeLead" style="margin-bottom:12px">Projenin gerçek kaynak kodu. Soldan bir dosya seçin, sağdaki listeden bir fonksiyona tıklayarak o satıra gidin. Arama kutusu tüm dosyalarda arar.</p>
+  <div class="cv">
+    <div><input id="cq" placeholder="Dosya veya kodda ara… (ör. pbkdf2, RandomForest)"><div class="ftree" id="ftree"></div></div>
+    <div><div class="chead" id="chead"></div><div class="cbody" id="cbody"><div class="cwrap"><div class="lhl" id="lhl"></div><pre class="ln" id="cln"></pre><pre id="ccode"></pre></div></div></div>
+    <div><div class="chead"><b style="color:var(--text);font-family:inherit">Fonksiyonlar / sınıflar</b><p id="symc"></p></div><div class="syms" id="syms"></div></div>
+  </div>
+</section>
+
+  </div>
+</main>
+<div id="tip"></div>
+<div id="notes"><button class="btn x" id="notesX">✕</button><h4 id="notesH"></h4><div id="notesBody"></div></div>
+
+<script src="kod.js"></script>
+<script src="sonuclar.js"></script>
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const sections = $$("section");
+let cur = 0;
+
+/* ---- gezinme ---- */
+$("#navlist").innerHTML = sections.map((s, i) => `<button data-i="${i}"><span class="n">${i + 1}</span>${s.dataset.title}</button>`).join("");
+$$("#navlist button").forEach(b => b.onclick = () => go(+b.dataset.i));
+function go(i) {
+  cur = Math.max(0, Math.min(sections.length - 1, i));
+  sections.forEach((s, j) => s.classList.toggle("on", j === cur));
+  $$("#navlist button").forEach((b, j) => b.classList.toggle("on", j === cur));
+  $("#crumb").textContent = `${cur + 1} / ${sections.length} · ${sections[cur].dataset.title}`;
+  $("#prog").style.width = ((cur + 1) / sections.length * 100) + "%";
+  $("#stage").scrollTop = 0;
+  $("#prev").style.visibility = cur ? "visible" : "hidden";
+  $("#next").textContent = cur === sections.length - 1 ? "Başa dön ↺" : "Sonraki →";
+  try { localStorage.setItem("tm-slide", cur); } catch (e) {}
+  if (typeof renderNotes === "function") renderNotes();
+}
+$("#prev").onclick = () => go(cur - 1);
+$("#next").onclick = () => go(cur === sections.length - 1 ? 0 : cur + 1);
+function toggleFs() {
+  if (window.pywebview && pywebview.api && pywebview.api.toggle_fullscreen) return pywebview.api.toggle_fullscreen();
+  if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
+}
+$("#fs").onclick = toggleFs;
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if ($("#lb").classList.contains("on")) {
+    if (e.key === "Escape") lbClose();
+    else if (e.key === "ArrowRight") lbShow(lbI + 1);
+    else if (e.key === "ArrowLeft") lbShow(lbI - 1);
+    return;
+  }
+  if (e.key === "n" || e.key === "N") toggleNotes();
+  else if (e.key === "ArrowRight" || e.key === "PageDown") go(cur + 1);
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") go(cur - 1);
+  else if (e.key === "Home") go(0);
+  else if (e.key === "End") go(sections.length - 1);
+  else if (e.key === "f" || e.key === "F" || e.key === "F11") { e.preventDefault(); toggleFs(); }
+});
+
+/* ---- kapak grafiği ---- */
+(function () {
+  const c = $("#tk"), ctx = c.getContext("2d");
+  let pts = [], p = 290;
+  for (let i = 0; i < 80; i++) { p *= 1 + (Math.random() - .48) * .025; pts.push(p); }
+  function draw() {
+    const w = c.width = c.clientWidth * devicePixelRatio, h = c.height = c.clientHeight * devicePixelRatio;
+    if (!w) return;
+    const mn = Math.min(...pts), mx = Math.max(...pts), x = i => i / (pts.length - 1) * w, y = v => h - 10 - (v - mn) / (mx - mn || 1) * (h - 20);
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "#22c55e55"); g.addColorStop(1, "#22c55e00");
+    ctx.beginPath(); pts.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(0, y(v)));
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); pts.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(0, y(v)));
+    ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 2 * devicePixelRatio; ctx.stroke();
+    // SMA20
+    ctx.beginPath(); pts.forEach((v, i) => { if (i < 19) return; const s = pts.slice(i - 19, i + 1).reduce((a, b) => a + b) / 20; i === 19 ? ctx.moveTo(x(i), y(s)) : ctx.lineTo(x(i), y(s)); });
+    ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 1.2 * devicePixelRatio; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+    const last = pts.at(-1), chg = (last / pts.at(-2) - 1) * 100;
+    $("#tkv").textContent = `${last.toFixed(2)} ₺ ${chg >= 0 ? "▲" : "▼"} ${chg.toFixed(2)}%`;
+    $("#tkv").style.color = chg >= 0 ? "#22c55e" : "#f43f5e";
+  }
+  setInterval(() => { pts.shift(); pts.push(pts.at(-1) * (1 + (Math.random() - .48) * .025)); draw(); }, 900);
+  addEventListener("resize", draw); setTimeout(draw, 50);
+})();
+
+/* ---- mimari ---- */
+const ARCH = [
+  { lbl: "Kullanıcı arayüzü", items: [
+    { id: "win", t: "Masaüstü penceresi", s: "pywebview + WebView2", d: "Windows'un Edge tabanlı WebView2 bileşeni ile açılan yerel pencere. Tarayıcı çubuğu yoktur. Sistem tepsisi simgesi (pystray) ve mini pencere (widget) de bu katmandadır.", f: "backend/desktop_app.py, desktop_notify.py", tags: ["pywebview", "pystray", "windows-toasts"] },
+    { id: "react", t: "React arayüzü", s: "TypeScript · Vite", d: "29 sayfalık tek sayfa uygulaması (SPA). Sayfa değişince yalnızca JSON veri istenir. Bileşenler: grafik, işlem paneli, hisse kartı, hızlı arama (Ctrl+K).", f: "frontend/src/pages/*, components/*", tags: ["React 19", "react-router", "TypeScript"] },
+    { id: "chart", t: "Grafik motoru", s: "Lightweight Charts", d: "TradingView'in açık kaynak grafik kütüphanesi. Mum, hacim, hareketli ortalamalar, Bollinger, RSI, MACD panelleri ve çoklu grafik görünümü.", f: "frontend/src/components/Chart.tsx", tags: ["lightweight-charts v5"] },
+  ]},
+  { arrow: "HTTP / JSON · Authorization: Bearer <JWT> · 127.0.0.1:8765/api/..." },
+  { lbl: "Yerel REST API (FastAPI · uvicorn)", items: [
+    { id: "main", t: "API yönlendirici", s: "main.py · 128 uç nokta", d: "Tüm HTTP uç noktaları burada tanımlanır. Pydantic modelleriyle giriş doğrulaması yapılır, Depends(current_user) ile kimlik kontrol edilir. Ağır işler (ML eğitimi) ayrı iş parçacığına aktarılır, böylece sunucu donmaz. Derlenmiş arayüz de aynı sunucudan verilir.", f: "backend/app/main.py", tags: ["FastAPI", "Pydantic", "uvicorn", "Swagger /docs"] },
+    { id: "auth", t: "Kimlik doğrulama", s: "PBKDF2 + JWT", d: "Kayıt, giriş, misafir hesabı, kurtarma kodu, hesap kilitleme, tüm oturumları kapatma.", f: "backend/app/auth.py", tags: ["hashlib", "PyJWT"] },
+    { id: "engine", t: "Arka plan motoru", s: "engine.py · 60 sn", d: "Ayrı bir iş parçacığında dakikada bir çalışır: bekleyen emirler, botlar, alarmlar, takaslar, günlük hesap değeri, haftalık rapor, SPK senkronu.", f: "backend/app/engine.py", tags: ["threading"] },
+  ]},
+  { lbl: "İş mantığı modülleri (Python)", items: [
+    { id: "market", t: "Piyasa verisi", s: "market.py · yahoo.py", d: "BIST, ABD, döviz, kripto verisini tek tip sembollerle çeker; bellek + SQLite önbelleği, hız sınırı koruması (devre kesici), türetilmiş semboller (gram altın).", f: "backend/app/market.py, yahoo.py, universe.py", tags: ["yfinance", "pandas"] },
+    { id: "ind", t: "Teknik analiz", s: "indicators · patterns · screener", d: "SMA, EMA, RSI, MACD, Bollinger, ATR; mum formasyonları, destek/direnç; çoklu varlık tarama ve bileşik skor.", f: "backend/app/indicators.py, patterns.py, screener.py", tags: ["pandas", "numpy"] },
+    { id: "ml", t: "YZ tahmin", s: "ml.py · seq_models.py", d: "13 öznitelik ile Lojistik/Ridge, Rastgele Orman, Gradyan Artırma, MLP, ARIMA (+ isteğe bağlı LSTM). Zaman sıralı eğitim/test, naif modelle kıyas.", f: "backend/app/ml.py, seq_models.py", tags: ["scikit-learn", "statsmodels", "PyTorch (ops.)"] },
+    { id: "llm", t: "LLM araçları", s: "assistant · news · bulletin · ai_tools", d: "Claude API ile asistan, haber duygu analizi, günlük bülten, grafik yorumu, doğal dille tarama. Anahtar yoksa kural tabanlı yanıt.", f: "backend/app/assistant.py, news.py, bulletin.py, ai_tools.py", tags: ["anthropic"] },
+    { id: "pf", t: "Sanal hesap ve portföy", s: "account · portfolio · orders · bots", d: "100.000 TL sanal bakiye, T+2 takas, ortalama maliyet, temettü, limit/stop emirleri, strateji botları, portföy sağlık skoru.", f: "backend/app/account.py, portfolio.py, orders.py, bots.py, wellness.py", tags: ["SQL"] },
+    { id: "rep", t: "Rapor ve analiz", s: "export · backtest · quant", d: "Excel (openpyxl) ve PDF (reportlab) rapor; strateji testi; etkin sınır, Monte Carlo, reel getiri.", f: "backend/app/export.py, backtest.py, quant.py", tags: ["openpyxl", "reportlab", "numpy"] },
+    { id: "tr", t: "Türkiye'ye özel", s: "kap · spk · ipo · fundamentals", d: "KAP bildirimleri, SPK halka arz başvuruları ve bülten (PDF ayrıştırma), halka arz getirileri, TL'ye çevrilmiş temel oranlar.", f: "backend/app/kap.py, spk.py, ipo.py, fundamentals.py", tags: ["pypdf"] },
+  ]},
+  { arrow: "SQL sorguları · HTTPS istekleri" },
+  { lbl: "Veri katmanı", items: [
+    { id: "db", t: "SQLite veritabanı", s: "finans.db · 19 tablo", d: "Kullanıcılar, portföy, işlemler, emirler, alarmlar, botlar, bildirimler, rozetler, tahminler ve fiyat önbelleği. %APPDATA%\\FinAnaliz altında.", f: "backend/app/db.py", tags: ["sqlite3"] },
+    { id: "ext", t: "Dış veri kaynakları", s: "Yahoo · KAP · SPK · Google · FF · TCMB", d: "Yahoo Finance (fiyat, temel veri), KAP (bildirim), SPK (halka arz), Google Haberler RSS, ForexFactory (ekonomik takvim), TCMB (enflasyon), Telegram (isteğe bağlı rapor gönderimi).", f: "market.py, kap.py, spk.py, news.py, econ.py", tags: ["HTTPS", "RSS", "JSON", "PDF"] },
+    { id: "claude", t: "Anthropic Claude API", s: "isteğe bağlı", d: "LLM özellikleri için. API anahtarı Ayarlar'dan girilir ve yalnızca yerel settings.json'da saklanır. Yoksa tüm özellikler kural tabanlı çalışır.", f: "backend/app/assistant.py", tags: ["claude-sonnet-5-5"] },
+  ]},
+];
+$("#layers").innerHTML = ARCH.map(L => L.arrow ? `<div class="arrow">${L.arrow}</div>` :
+  `<div class="layer"><div class="lbl">${L.lbl}</div><div class="boxes">${L.items.map(b => `<div class="box" data-id="${b.id}">${b.t}<small>${b.s}</small></div>`).join("")}</div></div>`).join("");
+const archMap = Object.fromEntries(ARCH.flatMap(L => L.items || []).map(b => [b.id, b]));
+$$(".box").forEach(el => el.onclick = () => {
+  $$(".box").forEach(x => x.classList.toggle("sel", x === el));
+  const b = archMap[el.dataset.id];
+  $("#detail").innerHTML = `<h3>${b.t}</h3><div>${b.tags.map(t => `<span class="tag b">${t}</span>`).join("")}</div><p style="color:var(--muted);margin-top:8px">${b.d}</p><div class="file">📁 <code>${b.f}</code></div>`;
+});
+
+/* ---- açılış animasyonu ---- */
+let bootTimer;
+$("#bootPlay").onclick = () => {
+  const st = $$("#bootSteps .step"); clearInterval(bootTimer);
+  st.forEach(s => s.className = "step"); let i = 0;
+  const msgs = ["veri klasörü: %APPDATA%\\FinAnaliz", "port 8765 boş ✓", "uvicorn: http://127.0.0.1:8765", "19 tablo hazır · motor başladı", "GET /api/markets → 200 OK", "WebView2 penceresi açıldı", "tepside çalışıyor ✓"];
+  const tick = () => {
+    if (i > 0) st[i - 1].className = "step done";
+    if (i >= st.length) { clearInterval(bootTimer); $("#bootMsg").textContent = "Uygulama hazır."; return; }
+    st[i].className = "step act"; $("#bootMsg").textContent = msgs[i]; i++;
+  };
+  tick(); bootTimer = setInterval(tick, 1100);
+};
+
+/* ---- istek akışı ---- */
+const REQ = [
+  { n: "Kullanıcı", ic: "🖱️", s: "THYAO seçer", t: "Kullanıcı tıklar", p: "Teknik Analiz sayfasında THYAO seçilir; React bileşeni durum (state) değişince veri ister.",
+    c: `<span class="c">// pages/Analysis.tsx</span>\n<span class="k">const</span> data = <span class="k">await</span> <span class="f">api</span>(<span class="s">"/history/THYAO.IS?period=1y&interval=1d"</span>);` },
+  { n: "React", ic: "⚛️", s: "fetch()", t: "HTTP isteği hazırlanır", p: "api.ts, localStorage'daki JWT'yi Authorization başlığına ekleyip yerel sunucuya gönderir.",
+    c: `GET /api/history/THYAO.IS?period=1y&interval=1d HTTP/1.1\nHost: 127.0.0.1:8765\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9...` },
+  { n: "FastAPI", ic: "🚦", s: "main.py", t: "Yönlendirme ve doğrulama", p: "Uç nokta eşleşir; Depends(current_user) JWT imzasını, süresini ve jeton sürümünü kontrol eder. Geçersizse 401 döner.",
+    c: `<span class="k">@app</span>.<span class="f">get</span>(<span class="s">"/api/history/{symbol}"</span>)\n<span class="k">def</span> <span class="f">history</span>(symbol: <span class="k">str</span>, period=<span class="s">"1y"</span>, interval=<span class="s">"1d"</span>,\n            uid: <span class="k">int</span> = <span class="f">Depends</span>(auth.current_user)):\n    candles = market.<span class="f">history</span>(symbol, period, interval)\n    <span class="k">return</span> indicators.<span class="f">enrich</span>(candles)` },
+  { n: "Önbellek", ic: "🗄️", s: "price_cache", t: "Önbellek kontrolü", p: "SQLite'taki price_cache tablosunda bu sembol + periyot için 30 dakikadan yeni veri var mı? Varsa doğrudan döner (milisaniyeler).",
+    c: `row = con.<span class="f">execute</span>(<span class="s">"SELECT data, ts FROM price_cache WHERE key=?"</span>, (key,))\n<span class="k">if</span> row <span class="k">and</span> time.<span class="f">time</span>() - row.ts &lt; <span class="f">_ttl</span>(interval):   <span class="c"># 300 / 1800 sn</span>\n    <span class="k">return</span> json.<span class="f">loads</span>(row.data)` },
+  { n: "Yahoo", ic: "🌐", s: "yfinance", t: "Dış kaynaktan veri", p: "Önbellekte yoksa Yahoo Finance'ten indirilir. Hız sınırı aşılmışsa istek gönderilmez, eski veri kullanılır. Sonuç önbelleğe yazılır.",
+    c: `<span class="k">with</span> yahoo.<span class="f">slot</span>():                 <span class="c"># eşzamanlı istek sınırı</span>\n    df = yf.<span class="f">Ticker</span>(<span class="s">"THYAO.IS"</span>).<span class="f">history</span>(period=<span class="s">"1y"</span>)\nyahoo.<span class="f">ok</span>()                          <span class="c"># devre kesici sıfırlanır</span>` },
+  { n: "Analiz", ic: "🧮", s: "pandas", t: "Göstergeler hesaplanır", p: "SMA, EMA, Bollinger, RSI, MACD vektörel olarak hesaplanır ve otomatik sinyal özeti (al/sat/nötr) üretilir.",
+    c: `df[<span class="s">"sma20"</span>] = df.close.<span class="f">rolling</span>(<span class="n">20</span>).<span class="f">mean</span>()\ndf[<span class="s">"rsi"</span>]   = <span class="f">rsi</span>(df.close, <span class="n">14</span>)\nmacd, signal, hist = <span class="f">macd</span>(df.close, <span class="n">12</span>, <span class="n">26</span>, <span class="n">9</span>)` },
+  { n: "JSON", ic: "📦", s: "yanıt", t: "JSON yanıt döner", p: "FastAPI Python nesnelerini otomatik olarak JSON'a çevirir.",
+    c: `HTTP/1.1 200 OK\n{ <span class="s">"candles"</span>: [{<span class="s">"time"</span>: <span class="n">1728518400</span>, <span class="s">"open"</span>: <span class="n">291.5</span>, <span class="s">"close"</span>: <span class="n">294.25</span>, ...}],\n  <span class="s">"signals"</span>: {<span class="s">"rsi"</span>: <span class="s">"nötr"</span>, <span class="s">"macd"</span>: <span class="s">"al"</span>} }` },
+  { n: "Grafik", ic: "📈", s: "Lightweight Charts", t: "Ekrana çizilir", p: "React veriyi alır, grafik kütüphanesi mumları ve göstergeleri canvas üzerine çizer. Toplam süre: önbellekten ~50 ms, Yahoo'dan ~1 sn.",
+    c: `series.<span class="f">setData</span>(data.candles);\nsma20.<span class="f">setData</span>(data.sma20);\nchart.<span class="f">timeScale</span>().<span class="f">fitContent</span>();` },
+];
+$("#reqFlow").innerHTML = REQ.map((r, i) => (i ? `<div class="fgap">➜</div>` : "") + `<div class="fnode"><span class="ic">${r.ic}</span><b>${r.n}</b><small>${r.s}</small></div>`).join("");
+$("#reqSteps").innerHTML = REQ.map(r => `<div class="step"><div><b>${r.t}</b><p>${r.p}</p></div></div>`).join("");
+let reqI = -1, reqTimer;
+function reqShow(i) {
+  const nodes = $$("#reqFlow .fnode"), gaps = $$("#reqFlow .fgap"), st = $$("#reqSteps .step");
+  nodes.forEach((n, j) => n.className = "fnode" + (j === i ? " act" : j < i ? " done" : ""));
+  gaps.forEach((g, j) => g.className = "fgap" + (j < i ? " act" : ""));
+  st.forEach((s, j) => s.className = "step" + (j === i ? " act" : j < i ? " done" : ""));
+  $("#reqCode").innerHTML = i >= 0 ? REQ[i].c : `<span class="c">// Oynat'a basın; her adımda ilgili kod burada görünecek.</span>`;
+}
+function reqNext() { reqI = reqI + 1 >= REQ.length ? 0 : reqI + 1; reqShow(reqI); }
+$("#reqPlay").onclick = () => { clearInterval(reqTimer); reqI = -1; reqNext(); reqTimer = setInterval(() => { if (reqI >= REQ.length - 1) return clearInterval(reqTimer); reqNext(); }, 2200); };
+$("#reqStep").onclick = () => { clearInterval(reqTimer); reqNext(); };
+$("#reqReset").onclick = () => { clearInterval(reqTimer); reqI = -1; reqShow(-1); };
+
+/* ---- göstergeler ---- */
+const IND = [
+  ["SMA / EMA", "Hareketli ortalamalar", "SMA = son n kapanışın ortalaması\nEMA = α·fiyat + (1−α)·EMA₋₁, α = 2/(n+1)", "Trend yönü; kısa ortalamanın uzunu yukarı kesmesi 'altın kesişim' (al sinyali)."],
+  ["RSI (14)", "Göreli güç endeksi", "RS = ort. kazanç / ort. kayıp\nRSI = 100 − 100 / (1 + RS)", "70 üstü aşırı alım, 30 altı aşırı satım."],
+  ["MACD (12,26,9)", "Ortalama yakınsama/ıraksama", "MACD = EMA12 − EMA26\nSinyal = EMA9(MACD)\nHistogram = MACD − Sinyal", "MACD sinyal çizgisini yukarı keserse al."],
+  ["Bollinger (20,2)", "Oynaklık bantları", "Orta = SMA20\nÜst/Alt = SMA20 ± 2·σ20", "Fiyatın bant içindeki konumu (bb_pos) ML özniteliği olarak da kullanılır."],
+  ["ATR (14)", "Ortalama gerçek aralık", "TR = max(Y−D, |Y−K₋₁|, |D−K₋₁|)\nATR = TR'nin 14 günlük ortalaması", "Oynaklık ölçüsü; zarar durdur seviyesi önerisinde kullanılır."],
+  ["Sharpe oranı", "Risk-düzeltilmiş getiri", "Sharpe = ort(günlük getiri) / σ · √252", "Strateji testinde stratejiler bu oranla kıyaslanır."],
+];
+$("#indis").innerHTML = IND.map(([a, b, f, u]) => `<div class="card" style="cursor:pointer" onclick="this.querySelector('pre').hidden=!this.querySelector('pre').hidden"><h3>${a}</h3><p>${b} · <span style="color:var(--acc2)">formül ▾</span></p><pre hidden>${f}\n\n<span class="c"># ${u}</span></pre></div>`).join("");
+
+/* ---- ML ---- */
+const FEATS = { ret1: "1 günlük getiri", ret2: "2 günlük getiri", ret3: "3 günlük getiri", ret5: "5 günlük getiri", ret10: "10 günlük getiri", rsi: "RSI / 100", macd_hist: "MACD histogramı / fiyat", dist_sma20: "Fiyatın SMA20'ye uzaklığı (%)", dist_sma50: "Fiyatın SMA50'ye uzaklığı (%)", bb_pos: "Bollinger bandı içindeki konum (0–1)", vol10: "10 günlük oynaklık (getiri std.)", vol_chg: "Hacmin 20 günlük ortalamaya oranı", range: "Gün içi aralık (Y−D)/K" };
+$("#feats").innerHTML = Object.entries(FEATS).map(([k, v]) => `<span title="${v}">${k}</span>`).join("");
+const MODELS = [
+  ["Naif model", "referans", "Yarın fiyat değişmez, yön bugünküyle aynı olur varsayımı. Eğitim gerektirmez. Diğer modellerin geçmesi gereken alt sınırdır."],
+  ["Lojistik / Ridge", "doğrusal", "StandardScaler + LogisticRegression (yön) ve Ridge(α=1.0) (getiri). Hızlı, yorumlanabilir, aşırı öğrenmeye dirençli."],
+  ["Rastgele Orman", "topluluk", "300 karar ağacı, max_depth=6, min_samples_leaf=5. Her ağaç verinin farklı bir alt kümesini görür, sonuç oylanır. Öznitelik önemleri buradan gösterilir."],
+  ["Gradyan Artırma", "topluluk", "HistGradientBoosting (XGBoost benzeri): 200 ağaç ardışık eğitilir, her biri öncekinin hatasını düzeltir. learning_rate=0.05, max_depth=3."],
+  ["Yapay Sinir Ağı", "MLP", "İki gizli katman (32, 16 nöron), L2 düzenlileştirme α=1e-3, erken durdurma. Doğrusal olmayan ilişkileri yakalar."],
+  ["ARIMA", "zaman serisi", "statsmodels ile klasik istatistiksel model. (p,0,q) dereceleri küçük bir ızgarada denenir, en düşük AIC'ye sahip olan seçilir."],
+];
+$("#models").innerHTML = MODELS.map(([a, b], i) => `<div class="card model" data-i="${i}"><b>${a}</b><p style="font-size:12px">${b}</p></div>`).join("");
+$$(".model").forEach(el => el.onclick = () => {
+  $$(".model").forEach(x => x.classList.toggle("sel", x === el));
+  const [a, b, d] = MODELS[+el.dataset.i];
+  $("#modelInfo").innerHTML = `<h3>${a} <span class="tag v">${b}</span></h3><p>${d}</p><table style="margin-top:8px"><tr><th>Ölçüt</th><th>Anlamı</th></tr><tr><td>Yön doğruluğu</td><td>Yükseliş/düşüşü doğru bilme oranı</td></tr><tr><td>MAE</td><td>Ortalama mutlak fiyat hatası</td></tr><tr><td>RMSE</td><td>Büyük hataları daha çok cezalandıran hata</td></tr></table>`;
+});
+
+/* ---- haber sözlüğü demo ---- */
+const POS = ["rekor", "artış", "yüksel", "kâr", "kar ", "büyüme", "olumlu", "toparlan", "ralli", "zirve", "hedef fiyat", "temettü", "anlaşma", "ihale", "onay"];
+const NEG = ["düşüş", "geriled", "zarar", "kayıp", "iflas", "ceza", "olumsuz", "satış baskısı", "sert düş", "endişe", "soruşturma", "dava", "kriz"];
+$("#newsBtn").onclick = () => {
+  const t = $("#newsIn").value.toLocaleLowerCase("tr") + " ";
+  const p = POS.filter(w => t.includes(w)), n = NEG.filter(w => t.includes(w));
+  const sc = (p.length - n.length) / Math.max(1, p.length + n.length);
+  const lab = sc > 0 ? "OLUMLU" : sc < 0 ? "OLUMSUZ" : "NÖTR";
+  $("#newsOut").innerHTML = `<b style="color:${sc > 0 ? "#22c55e" : sc < 0 ? "#f43f5e" : "#93a1bd"}">${lab}</b> (skor ${sc.toFixed(2)})<br>olumlu: ${p.join(", ") || "-"} · olumsuz: ${n.join(", ") || "-"}`;
+};
+
+/* ---- motor ---- */
+let tickN = 0;
+setInterval(() => {
+  if (!$("#engineSec").classList.contains("on")) return;
+  tickN++; $("#tickN").textContent = tickN;
+  $("#ringc").style.transition = "none"; $("#ringc").style.strokeDashoffset = 603;
+  requestAnimationFrame(() => { $("#ringc").style.transition = "stroke-dashoffset .95s linear"; $("#ringc").style.strokeDashoffset = 0; });
+  $$("#tasks .task").forEach(t => {
+    const e = +t.dataset.every, hit = e === 1 || (e === 10 ? tickN % 10 === 1 : tickN % 30 === 5);
+    t.classList.toggle("hit", hit);
+  });
+}, 1000);
+
+/* ---- veritabanı ---- */
+const DB = [
+  ["users", "Kullanıcı adı, şifre özeti, kurtarma kodu özeti, kilit durumu, jeton sürümü"],
+  ["user_prefs", "Tema, favoriler, arayüz tercihleri"],
+  ["transactions", "Alım/satım işlemleri, kur, komisyon, takas tarihi"],
+  ["cash_movements", "Para yatırma/çekme, temettü"],
+  ["portfolio", "Varlık ve ortalama maliyet"],
+  ["orders", "Bekleyen limit / stop / kâr al emirleri"],
+  ["bots", "Strateji botları ve durumları"],
+  ["alerts", "Fiyat alarmları"],
+  ["watchlist", "İzleme listesi"],
+  ["notifications", "Uygulama içi bildirimler"],
+  ["targets", "Hedef fiyat / zarar sınırı"],
+  ["equity_snapshots", "Günlük hesap değeri (performans grafiği)"],
+  ["badges", "Başarı rozetleri"],
+  ["predictions", "Haftalık tahmin oyunu"],
+  ["academy_progress", "Akademi ders/test ilerlemesi"],
+  ["weekly_reports", "Haftalık kişisel raporlar"],
+  ["smart_alert_log", "Akıllı uyarı geçmişi (tekrarı önler)"],
+  ["price_cache", "Mum verisi önbelleği"],
+  ["frame_cache", "Toplu fiyat tablosu önbelleği"],
+];
+$("#dbgrid").innerHTML = DB.map(([a, b]) => `<div class="tbl"><h4>${a}</h4><p>${b}</p></div>`).join("");
+
+/* ---- PBKDF2 demo ---- */
+$("#pwBtn").onclick = async () => {
+  const out = $("#pwOut");
+  if (!crypto.subtle) { out.textContent = "Bu ortamda Web Crypto kullanılamıyor."; return; }
+  out.textContent = "200.000 tur hesaplanıyor…";
+  const salt = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
+  const t0 = performance.now(), enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode($("#pw").value), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: enc.encode(salt), iterations: 200000, hash: "SHA-256" }, key, 256);
+  const hex = [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+  out.innerHTML = `<span style="color:#fcd34d">${salt}</span>$${hex}<br><span style="color:var(--muted)">${Math.round(performance.now() - t0)} ms sürdü · tekrar basın: tuz değiştiği için özet tamamen değişir</span>`;
+};
+
+/* ---- teknolojiler ---- */
+const TECH = [
+  ["Arka uç", "Python 3", "Tüm sunucu mantığı"], ["Arka uç", "FastAPI", "REST API, Pydantic doğrulama, Swagger"], ["Arka uç", "Uvicorn", "ASGI web sunucusu"], ["Veri", "SQLite", "Gömülü veritabanı"],
+  ["Veri bilimi", "pandas", "Zaman serisi işleme"], ["Veri bilimi", "NumPy", "Sayısal hesaplama"], ["Yapay zekâ", "scikit-learn", "RF, Gradyan Artırma, MLP, Lojistik/Ridge"], ["Yapay zekâ", "statsmodels", "ARIMA"],
+  ["Yapay zekâ", "PyTorch (ops.)", "LSTM derin öğrenme"], ["Yapay zekâ", "Anthropic Claude", "LLM asistanı, duygu analizi, bülten"], ["Veri kaynağı", "yfinance", "Yahoo Finance verisi"], ["Güvenlik", "PyJWT + PBKDF2", "Oturum ve şifre güvenliği"],
+  ["Arayüz", "React 19", "Bileşen tabanlı arayüz"], ["Arayüz", "TypeScript", "Tip güvenli JavaScript"], ["Arayüz", "Vite", "Derleme ve geliştirme sunucusu"], ["Arayüz", "Lightweight Charts", "Finansal grafikler"],
+  ["Masaüstü", "pywebview", "WebView2 ile yerel pencere"], ["Masaüstü", "pystray", "Sistem tepsisi"], ["Masaüstü", "windows-toasts", "Windows bildirimleri"], ["Masaüstü", "PyInstaller", "exe paketleme"],
+  ["Rapor", "openpyxl", "Excel rapor"], ["Rapor", "reportlab", "PDF rapor"], ["Rapor", "pypdf", "SPK bülteni PDF okuma"], ["Araç", "Git / GitHub", "Sürüm kontrolü"],
+];
+$("#tech").innerHTML = TECH.map(([c, n, d]) => `<div class="card"><div class="cat">${c}</div><b>${n}</b><span>${d}</span></div>`).join("");
+
+/* ---- kaynak kod gezgini ---- */
+const KOD = window.KOD || { files: [], total: 0 };
+const FILES = Object.fromEntries(KOD.files.map(f => [f.path, f]));
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const KW = {
+  py: new Set("False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" ")),
+  ts: new Set("as async await break case catch class const continue default delete do else enum export extends false finally for from function if import in instanceof interface let new null of return switch this throw true try type typeof undefined var void while yield".split(" ")),
+};
+const BUILTIN = new Set("self print len range dict list str int float bool tuple set min max sum abs round sorted enumerate zip isinstance super open Promise Math JSON Object Array String Number console window document useState useEffect useMemo useRef useCallback".split(" "));
+const RX = {
+  py: /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|\b[rRbBfFuU]{1,2}"(?:\\.|[^"\\\n])*"|\b[rRbBfFuU]{1,2}'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(@[\w.]+)|(\b\d[\d_]*(?:\.\d+)?(?:e-?\d+)?\b)|([A-Za-z_]\w*)/g,
+  ts: /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(@\w+)|(\b\d[\d_]*(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)/g,
+  bat: /((?:^|\n)\s*(?:rem|::)[^\n]*)|("[^"\n]*")|(%[\w~]+%?|![\w]+!)|(\b\d+\b)|([A-Za-z_][\w.-]*)/gi,
+  json: /(\/\/[^\n]*)|("(?:\\.|[^"\\\n])*")|(@)|(\b\d+(?:\.\d+)?\b)|(true|false|null)/g,
+};
+function highlight(code, lang) {
+  const rx = RX[lang]; if (!rx) return esc(code);
+  const kw = KW[lang] || new Set(["echo", "set", "if", "call", "exit", "goto", "pushd", "popd", "not", "exist", "cd", "true", "false", "null"]);
+  let out = "", last = 0, prev = ""; rx.lastIndex = 0;
+  for (let m; (m = rx.exec(code));) {
+    if (!m[0]) { rx.lastIndex++; continue; }
+    out += esc(code.slice(last, m.index)); last = rx.lastIndex;
+    const t = esc(m[0]);
+    if (m[1]) out += `<span class="c">${t}</span>`;
+    else if (m[2]) out += `<span class="s">${t}</span>`;
+    else if (m[3]) out += `<span class="d">${t}</span>`;
+    else if (m[4]) out += `<span class="n">${t}</span>`;
+    else {
+      const w = m[0];
+      if (kw.has(w.toLowerCase ? (lang === "bat" ? w.toLowerCase() : w) : w)) out += `<span class="k">${t}</span>`;
+      else if (prev === "def" || prev === "class" || prev === "function") out += `<span class="f">${t}</span>`;
+      else if (BUILTIN.has(w)) out += `<span class="b">${t}</span>`;
+      else if (code[rx.lastIndex] === "(") out += `<span class="f">${t}</span>`;
+      else out += t;
+      prev = w; continue;
+    }
+    prev = "";
+  }
+  return out + esc(code.slice(last));
+}
+const LH = 19;
+let curFile = null;
+function renderTree(q = "") {
+  q = q.trim().toLocaleLowerCase("tr");
+  let html = "", group = "";
+  for (const f of KOD.files) {
+    const name = f.path.split("/").pop();
+    let hits = [];
+    if (q) {
+      const inName = f.path.toLowerCase().includes(q);
+      if (q.length >= 3) {
+        const ls = f.code.split("\n");
+        for (let i = 0; i < ls.length && hits.length < 6; i++) if (ls[i].toLocaleLowerCase("tr").includes(q)) hits.push([i + 1, ls[i].trim()]);
+      }
+      if (!inName && !hits.length) continue;
+    }
+    if (f.group !== group) { group = f.group; html += `<div class="grp">${group}</div>`; }
+    html += `<div class="fi${curFile && curFile.path === f.path ? " on" : ""}" data-p="${f.path}" title="${f.path}"><span>${name}</span><small>${f.lines}</small></div>`;
+    html += hits.map(([n, l]) => `<div class="hit" data-p="${f.path}" data-l="${n}">${n}: ${esc(l.slice(0, 60))}</div>`).join("");
+  }
+  $("#ftree").innerHTML = html || `<div class="grp">Sonuç yok</div>`;
+}
+function gotoLine(n) {
+  const hl = $("#lhl");
+  if (!n) { hl.style.display = "none"; $("#cbody").scrollTop = 0; return; }
+  hl.style.display = "block"; hl.style.top = (10 + (n - 1) * LH) + "px";
+  $("#cbody").scrollTop = Math.max(0, (n - 1) * LH - 120);
+}
+function showFile(path, target) {
+  const f = FILES[path]; if (!f) return false;
+  if (!curFile || curFile.path !== path) {
+    curFile = f;
+    $("#chead").innerHTML = `<b>${f.path}</b> <span class="tag b">${f.lines} satır</span><p>${esc(f.desc || "")}</p>`;
+    $("#cln").textContent = Array.from({ length: f.lines }, (_, i) => i + 1).join("\n");
+    $("#ccode").innerHTML = highlight(f.code, f.lang);
+    $("#symc").textContent = f.syms.length ? `${f.syms.length} tanım · tıklayınca satıra gider` : "Bu dosyada listelenecek tanım yok.";
+    $("#syms").innerHTML = f.syms.map(s => `<div class="sy" data-l="${s.line}"><i>${s.kind}</i>${s.name}${s.route ? `<small>${esc(s.route)}</small>` : ""}</div>`).join("");
+    $$("#ftree .fi").forEach(x => x.classList.toggle("on", x.dataset.p === path));
+  }
+  let line = 0;
+  if (typeof target === "number") line = target;
+  else if (target) { const s = f.syms.find(s => s.name === target); line = s ? s.line : 0; }
+  requestAnimationFrame(() => gotoLine(line));
+  return true;
+}
+function openCode(path, target) {
+  go(sections.indexOf($("#codeSec")));
+  showFile(path, target);
+}
+if (KOD.files.length) {
+  $("#codeLead").innerHTML += ` <b>${KOD.files.length} dosya, ${KOD.total.toLocaleString("tr")} satır.</b>`;
+  renderTree();
+  showFile("backend/app/main.py");
+} else {
+  $("#codeLead").textContent = "Kod verisi (kod.js) bulunamadı. kod_topla.py çalıştırılarak oluşturulur.";
+}
+let cqTimer;
+$("#cq").oninput = e => { clearTimeout(cqTimer); cqTimer = setTimeout(() => renderTree(e.target.value), 200); };
+$("#ftree").onclick = e => { const el = e.target.closest("[data-p]"); if (el) showFile(el.dataset.p, el.dataset.l ? +el.dataset.l : 0); };
+$("#syms").onclick = e => { const el = e.target.closest("[data-l]"); if (el) gotoLine(+el.dataset.l); };
+$("#codeBtn").onclick = () => go(sections.indexOf($("#codeSec")));
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-code]"); if (!el) return;
+  e.preventDefault(); openCode(el.dataset.code, el.dataset.sym || 0);
+});
+
+/* mimari kutularından ve istek adımlarından koda bağlantı */
+function archFiles(f) {
+  let dir = "backend/app/";
+  return f.split(",").map(s => s.trim()).flatMap(s => {
+    if (s.includes("*")) return [];
+    if (s.includes("/")) { dir = s.slice(0, s.lastIndexOf("/") + 1); return [s]; }
+    return [dir + s];
+  }).filter(p => FILES[p]);
+}
+const ARCH_EXTRA = { react: ["frontend/src/App.tsx", "frontend/src/api.ts"], db: [], ext: [] };
+$$(".box").forEach(el => el.addEventListener("click", () => {
+  const b = archMap[el.dataset.id];
+  const files = [...new Set([...(ARCH_EXTRA[b.id] || []), ...archFiles(b.f)])];
+  if (files.length) $("#detail").insertAdjacentHTML("beforeend", `<div style="margin-top:12px">${files.map(p => `<a class="code-link" href="#" data-code="${p}" style="display:block">${p}</a>`).join("")}</div>`);
+}));
+const REQ_SRC = [["frontend/src/pages/Analysis.tsx"], ["frontend/src/api.ts", "api"], ["backend/app/main.py", "history"], ["backend/app/market.py", "history"],
+  ["backend/app/market.py", "_download_history"], ["backend/app/indicators.py", "compute_all"], ["backend/app/main.py", "history"], ["frontend/src/components/Chart.tsx"]];
+$$("#reqSteps .step > div").forEach((d, i) => {
+  const [p, s] = REQ_SRC[i]; if (!FILES[p]) return;
+  d.insertAdjacentHTML("beforeend", `<a class="code-link" href="#" data-code="${p}" data-sym="${s || ""}">${p.split("/").pop()}${s ? ` → ${s}()` : ""}</a>`);
+});
+
+/* ---- uygulama ekranları ---- */
+const SHOTS = [
+  ["01-piyasa-ozeti", "Piyasa Özeti", "Ana sayfa: dört piyasanın özeti, 'Bugün ne oldu?' kutusu ve günün bülteni. Bülten, LLM anahtarı yoksa şablonla üretilir (görüntüdeki gibi).", ["backend/app/today.py", "backend/app/bulletin.py", "frontend/src/pages/Dashboard.tsx"]],
+  ["02-teknik-analiz", "Teknik Analiz", "THYAO mum grafiği: SMA 20/50, otomatik bulunan mum formasyonları (Kayan Yıldız, Yutan Boğa…), destek/direnç seviyeleri, hacim, RSI ve MACD panelleri.", ["backend/app/indicators.py", "backend/app/patterns.py", "frontend/src/components/Chart.tsx"]],
+  ["03-yz-tahmin", "YZ Tahmin", "Modeller THYAO'nun 2 yıllık verisiyle eğitilip test edildi. Naif model %48, seçilen Gradyan Artırma %58 yön doğruluğu. (Bu ekran PyTorch kurulu geliştirme ortamında alındığı için LSTM de görünüyor.)", ["backend/app/ml.py", "backend/app/seq_models.py", "frontend/src/pages/Prediction.tsx"]],
+  ["04-portfoy", "Portföy ve sanal hesap", "Sanal TL hesabı, T0/T1/T2 takas durumu, alım gücü, piyasa/limit/zarar durdur emirleri.", ["backend/app/account.py", "backend/app/portfolio.py", "backend/app/orders.py", "frontend/src/components/TradePanel.tsx"]],
+  ["05-strateji-testi", "Strateji Testi", "THYAO'da SMA 20/50 kesişim stratejisi ile Al-Tut karşılaştırması: sermaye eğrisi, Sharpe, maksimum düşüş, işlem sayısı.", ["backend/app/backtest.py", "frontend/src/pages/Backtest.tsx"]],
+  ["06-tarama", "Teknik Tarama", "615 BIST hissesi saniyeler içinde taranır; hazır sorular (aşırı satım, altın kesişim, yıllık zirve…) ve bileşik teknik skor.", ["backend/app/screener.py", "frontend/src/pages/Screener.tsx"]],
+  ["07-borsa-istanbul", "Borsa İstanbul", "BIST endeksleri, piyasa genişliği, sektör performansı, günün kazandıranları ve kaybettirenleri.", ["backend/app/market.py", "backend/app/universe.py", "frontend/src/pages/Market.tsx"]],
+  ["08-kap", "KAP Bildirimleri", "Kamuyu Aydınlatma Platformu bildirimleri; favori ve portföy hisselerine göre filtreleme.", ["backend/app/kap.py", "frontend/src/pages/Kap.tsx"]],
+  ["09-halka-arz", "Halka Arz", "SPK'nın resmi başvuru listesi ve haftalık bülteninden (PDF ayrıştırma) onay bekleyen ve onaylanan halka arzlar, geçmiş halka arz getirileri.", ["backend/app/spk.py", "backend/app/ipo.py", "frontend/src/pages/Ipo.tsx"]],
+  ["10-haberler", "Haberler ve duygu analizi", "Google Haberler başlıkları olumlu/nötr/olumsuz olarak etiketlenir; görüntüde LLM anahtarı olmadığı için sözlük tabanlı yöntem kullanılıyor.", ["backend/app/news.py", "frontend/src/pages/News.tsx"]],
+];
+$("#gal").innerHTML = SHOTS.map(([f, t, d], i) => `<div class="shot" data-i="${i}"><img src="ekran/${f}.jpg" alt="${t}" loading="lazy"><div>${t}<small>${d.split(".")[0]}.</small></div></div>`).join("");
+let lbI = 0;
+function lbShow(i) {
+  lbI = (i + SHOTS.length) % SHOTS.length;
+  const [f, t, d, files] = SHOTS[lbI];
+  $("#lbImg").src = `ekran/${f}.jpg`;
+  $("#lbCap").innerHTML = `<b>${lbI + 1}/${SHOTS.length} · ${t}</b><p>${d}</p><p>${files.map(p => `<a class="code-link" href="#" data-code="${p}">${p.split("/").pop()}</a>`).join(" &nbsp; ")}</p>`;
+  $("#lb").classList.add("on");
+}
+function lbClose() { $("#lb").classList.remove("on"); }
+$("#gal").onclick = e => { const el = e.target.closest(".shot"); if (el) lbShow(+el.dataset.i); };
+$("#lbX").onclick = lbClose; $("#lbP").onclick = () => lbShow(lbI - 1); $("#lbN").onclick = () => lbShow(lbI + 1);
+$("#lb").onclick = e => { if (e.target.id === "lb") lbClose(); };
+const _openCode = openCode;
+openCode = (p, t) => { lbClose(); _openCode(p, t); };
+
+/* ---- deney sonuçları ---- */
+const SON = window.SONUC;
+const nf = (v, d = 2) => Number(v).toLocaleString("tr", { minimumFractionDigits: d, maximumFractionDigits: d });
+const NAIVE = "Naif Model (referans)";
+const ci = (p, n) => 1.96 * Math.sqrt((p / 100) * (1 - p / 100) / n) * 100;
+function lineChart(series, w = 540, h = 230) {
+  const all = series.flatMap(s => s.data.map(d => d.value));
+  const mn = Math.min(...all), mx = Math.max(...all), pad = (mx - mn) * 0.06 || 1;
+  const t0 = series[0].data[0].time, t1 = series[0].data.at(-1).time;
+  const X = t => 46 + (t - t0) / (t1 - t0 || 1) * (w - 56), Y = v => 10 + (1 - (v - mn + pad) / (mx - mn + 2 * pad)) * (h - 34);
+  const date = t => new Date(t * 1000).toLocaleDateString("tr", { day: "2-digit", month: "short", year: "2-digit" });
+  const grid = [0, .5, 1].map(k => { const v = mn - pad + k * (mx - mn + 2 * pad); return `<line x1="46" x2="${w - 10}" y1="${Y(v)}" y2="${Y(v)}" stroke="#24324f"/><text x="40" y="${Y(v) + 4}" text-anchor="end">${nf(v, v < 10 ? 3 : 1)}</text>`; }).join("");
+  const lines = series.map(s => `<polyline fill="none" stroke="${s.color}" stroke-width="${s.w || 1.6}" points="${s.data.map(d => `${X(d.time).toFixed(1)},${Y(d.value).toFixed(1)}`).join(" ")}"/>`).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%">${grid}${lines}<text x="46" y="${h - 4}">${date(t0)}</text><text x="${w - 10}" y="${h - 4}" text-anchor="end">${date(t1)}</text></svg>`;
+}
+function renderAsset(i) {
+  const a = SON.assets[i];
+  $$("#atabs button").forEach((b, j) => b.classList.toggle("on", j === i));
+  const naive = a.metrics.find(m => m.model === NAIVE).direction_accuracy;
+  $("#resT1").textContent = `Yön doğruluğu: ${a.name} (test: ${a.test_size} gün)`;
+  $("#resBars").innerHTML = a.metrics.map(m => {
+    const cls = m.model === a.best_model ? "best" : m.model === NAIVE ? "naive" : "";
+    return `<div class="hb ${cls}"><span>${m.model.replace(" (referans)", "")}${m.model === a.best_model ? ' <span class="tag">seçildi</span>' : ""}</span><div class="tr"><div class="fl" style="width:${m.direction_accuracy}%"></div><div class="ref" style="left:${naive}%"></div><div class="ref h" style="left:50%"></div></div><b>%${nf(m.direction_accuracy, 1)}</b></div>`;
+  }).join("");
+  $("#resChart").innerHTML = lineChart([{ data: a.chart.actual, color: "#94a3b8", w: 2 }, { data: a.chart.predicted, color: "#f59e0b" }]);
+  const maxI = a.importance[0].importance;
+  $("#resImp").innerHTML = a.importance.map(f => `<div class="hb" style="grid-template-columns:110px 1fr 54px"><span class="mono" title="${FEATS[f.feature] || ""}">${f.feature}</span><div class="tr"><div class="fl" style="width:${f.importance / maxI * 100}%"></div></div><b>${nf(f.importance * 100, 1)}</b></div>`).join("") + `<p style="font-size:12px;margin-top:6px">Değerler yüzde katkıdır. Önemlerin birbirine yakın olması, tek bir göstergenin belirleyici olmadığını gösterir.</p>`;
+  const bestRet = Math.max(...a.backtest.map(b => b.total_return_pct));
+  $("#resBt").innerHTML = `<tr><th>Strateji</th><th>Getiri</th><th>Sharpe</th><th>Maks. düşüş</th><th>İşlem</th></tr>` + a.backtest.map(b =>
+    `<tr${b.total_return_pct === bestRet ? ' style="background:#0f2a1d"' : ""}><td>${SON.strategies[b.key]}${b.key === "buy_hold" ? ' <span class="tag o">referans</span>' : ""}</td><td class="${b.total_return_pct >= 0 ? "pos" : "neg"}">%${nf(b.total_return_pct)}</td><td>${nf(b.sharpe)}</td><td class="neg">%${nf(b.max_drawdown_pct)}</td><td>${b.trade_count}</td></tr>`).join("") +
+    `<tr><td colspan="5" style="color:var(--muted);font-size:12px">Veri: ${a.start} – ${a.end} (${a.days} gün)</td></tr>`;
+}
+if (SON && SON.assets.length) {
+  $("#resLead").innerHTML += ` Sonuçlar ${SON.generated} tarihinde üretildi.`;
+  const rows = SON.assets.map(a => {
+    const nv = a.metrics.find(m => m.model === NAIVE).direction_accuracy, b = a.metrics.find(m => m.model === a.best_model);
+    return { a, nv, b, d: b.direction_accuracy - nv, ci: ci(b.direction_accuracy, a.test_size) };
+  });
+  $("#resSum").innerHTML = `<tr><th>Varlık</th><th>Piyasa</th><th>Test günü</th><th>Naif model</th><th>Seçilen model</th><th>Yön doğruluğu</th><th>Naife göre fark</th></tr>` + rows.map(r =>
+    `<tr><td><b>${r.a.symbol}</b> <span style="color:var(--muted)">${r.a.name}</span></td><td>${r.a.market}</td><td>${r.a.test_size}</td><td>%${nf(r.nv, 1)}</td><td>${r.a.best_model}</td><td>%${nf(r.b.direction_accuracy, 1)} <span style="color:var(--muted)">±${nf(r.ci, 1)}</span></td><td class="${r.d > 0 ? "pos" : "neg"}">${r.d > 0 ? "+" : ""}${nf(r.d, 1)} puan</td></tr>`).join("");
+  $("#atabs").innerHTML = SON.assets.map((a, i) => `<button data-i="${i}">${a.symbol}<small>${a.market}</small></button>`).join("");
+  $("#atabs").onclick = e => { const b = e.target.closest("button"); if (b) renderAsset(+b.dataset.i); };
+  renderAsset(0);
+
+  // bulgular verinin kendisinden hesaplanır
+  const F = [], n = rows.length, beat = rows.filter(r => r.d > 0);
+  F.push(["✅", `<b>${beat.length}/${n} varlıkta</b> seçilen model naif modeli geçti (ortalama fark ${nf(beat.reduce((s, r) => s + r.d, 0) / (beat.length || 1), 1)} puan); ${rows.filter(r => r.b.direction_accuracy > 50).length}/${n} varlıkta %50 (yazı-tura) düzeyinin de üzerinde kaldı.`]);
+  const cnt = {}; SON.assets.forEach(a => cnt[a.best_model] = (cnt[a.best_model] || 0) + 1);
+  F.push(["🔀", `<b>Tek bir "en iyi" model yok:</b> ${Object.entries(cnt).map(([m, c]) => `${m} (${c})`).join(", ")}. Bu yüzden uygulama modeli her varlık için ayrı seçiyor.`]);
+  const trend = rows.filter(r => r.nv >= 65);
+  if (trend.length) F.push(["⚠️", `<b>${trend.map(r => r.a.symbol).join(", ")}</b>: naif model bile %${nf(trend[0].nv, 1)} doğru, çünkü fiyat sürekli aynı yönde hareket etti ve günlerin çoğu aynı yönde kapandı. Yön doğruluğu tek başına yanıltıcı olabilir; naif referansın şart olmasının nedeni budur.`]);
+  const avgCi = rows.reduce((s, r) => s + r.ci, 0) / n, avgN = Math.round(rows.reduce((s, r) => s + r.a.test_size, 0) / n);
+  F.push(["📏", `Test kümesi ortalama <b>${avgN} gün</b>; %95 güven aralığı yaklaşık <b>±${nf(avgCi, 1)} puan</b>. ${(k => k ? `Naife göre ${n} farkın <b>${k} tanesi</b> bu aralığın içinde kalıyor` : "Farkların hepsi bu aralığın dışında")(rows.filter(r => r.d < r.ci).length)}; sonuçlar umut verici ama kesin kanıt değil.`]);
+  const maeBy = {}; SON.assets.forEach(a => a.metrics.forEach(m => { if (m.model !== NAIVE) (maeBy[m.model] ||= []).push(m.mae_pct); }));
+  const maeAvg = Object.entries(maeBy).map(([m, v]) => [m, v.reduce((s, x) => s + x, 0) / v.length]).sort((x, y) => y[1] - x[1]);
+  const others = maeAvg.slice(1).reduce((s, x) => s + x[1], 0) / (maeAvg.length - 1);
+  if (maeAvg[0][1] > others * 1.8) F.push(["📉", `Getiri tahmininde en yüksek hata <b>${maeAvg[0][0]}</b> modelinde (ortalama %${nf(maeAvg[0][1])}, diğerleri %${nf(others)}). Küçük veri setinde sinir ağı regresyonu kararsız; yön tahmininde ise diğerleriyle benzer.`]);
+  const bhWins = SON.assets.filter(a => { const bh = a.backtest.find(b => b.key === "buy_hold").total_return_pct; return a.backtest.every(b => b.total_return_pct <= bh); });
+  F.push(["🧪", `Strateji testinde <b>Al-Tut ${bhWins.length}/${n} varlıkta</b> en yüksek getiriyi verdi. Teknik stratejiler bazı dönemlerde (ör. ${SON.assets.map(a => { const b = a.backtest.filter(x => x.key !== "buy_hold").sort((x, y) => y.total_return_pct - x.total_return_pct)[0]; const bh = a.backtest.find(x => x.key === "buy_hold").total_return_pct; return b.total_return_pct > bh ? `${a.symbol}'da ${SON.strategies[b.key].split(" (")[0]}` : null; }).filter(Boolean).slice(0, 2).join(", ") || "—"}) daha iyi olsa da hiçbiri her varlıkta tutarlı değil.`]);
+  if (SON.assets.some(a => a.metrics.some(m => m.model.startsWith("LSTM")))) F.push(["ℹ️", "LSTM bu deneyde yer alıyor, çünkü sonuçlar PyTorch kurulu geliştirme ortamında üretildi. Exe paketinde LSTM yok; sonuçlara göre diğer modellerden belirgin biçimde daha iyi değil."]);
+  $("#findings").innerHTML = F.map(([i, t]) => `<div class="finding"><span>${i}</span><div>${t}</div></div>`).join("");
+  $("#concl1").innerHTML = `Deneylerde seçilen model <b>${beat.length}/${n} varlıkta</b> naif modeli geçti`;
+} else {
+  $("#resLead").innerHTML += " <b>Sonuç dosyası (sonuclar.js) bulunamadı; sonuc_uret.py ile oluşturulur.</b>";
+}
+
+/* ---- konuşma notları ---- */
+const NOTES = {
+  "Giriş": ["Projemin adı 'Borsa, Döviz ve Kripto Piyasaları için Yapay Zekâ Destekli Finansal Analiz Platformu', uygulamanın adı TradeMetrix.", "Kısaca: piyasa verilerini toplayan, teknik ve temel analiz yapan, makine öğrenmesiyle ertesi günün fiyat yönünü tahmin eden ve sanal bir hesapla risksiz alım satım yaptıran bir masaüstü uygulaması.", "Dışarıdan tek bir exe gibi görünüyor ama içinde gerçek bir web sunucusu ve web arayüzü çalışıyor. Bu sunumda arka planda nasıl çalıştığını katman katman anlatacağım."],
+  "Problem ve amaç": ["Çıkış noktam şu: bireysel yatırımcı için veriler dağınık, profesyonel araçlar pahalı ve İngilizce, yapay zekâ tahmini sunan araçlar da ne kadar başarılı olduklarını göstermiyor.", "Amacım bunları tek bir Türkçe platformda toplamak, analizi otomatikleştirmek ve özellikle tahmin modellerini şeffaf biçimde, bir referans modelle kıyaslayarak sunmaktı.", "Uygulama eğitim amaçlıdır, yatırım tavsiyesi vermez."],
+  "Uygulamadan ekranlar": ["Mimariye geçmeden önce uygulamanın nasıl göründüğünü göstereyim. Bu görüntüler gerçek verilerle çalışırken alındı.", "Örneğin teknik analiz ekranında formasyonlar ve destek-direnç seviyeleri otomatik bulunuyor; YZ tahmin ekranında da modellerin test sonuçları tablo hâlinde görünüyor.", "Büyük görünümde her ekranın altında, o ekranı üreten kod dosyalarına geçebiliyorum."],
+  "Genel mimari": ["Uygulama üç katmandan oluşuyor: React ile yazılmış arayüz, FastAPI ile yazılmış yerel bir REST API ve veri katmanı.", "Arayüz ile sunucu HTTP üzerinden JSON ile konuşuyor; her istekte oturum jetonu (JWT) gönderiliyor.", "İş mantığı Python modüllerine ayrılmış: piyasa verisi, teknik analiz, yapay zekâ, LLM, portföy gibi. Her kutu projede gerçek bir dosyaya karşılık geliyor."],
+  "Exe açılınca ne olur?": ["Exe'ye tıklandığında önce boş bir port seçiliyor, sonra FastAPI sunucusu arka planda ayrı bir iş parçacığında başlıyor.", "Sunucu yalnızca 127.0.0.1 üzerinde dinliyor, yani dışarıdan erişilemiyor.", "Sunucu hazır olunca pywebview ile Windows'un WebView2 bileşeni kullanılarak bir pencere açılıyor. Kullanıcı tarayıcı görmüyor, normal bir masaüstü uygulaması gibi kullanıyor."],
+  "Bir isteğin yolculuğu": ["Bir örnek üzerinden gideyim: kullanıcı THYAO grafiğini açtığında React bir HTTP isteği gönderiyor.", "FastAPI önce jetonu doğruluyor, sonra veritabanındaki önbelleğe bakıyor. Veri tazeyse doğrudan dönüyor, değilse Yahoo Finance'ten çekip önbelleğe yazıyor.", "Göstergeler pandas ile hesaplanıyor, JSON olarak dönüyor ve grafik kütüphanesi ekrana çiziyor. Önbellekten bu iş yaklaşık 50 milisaniye sürüyor."],
+  "Veri toplama ve önbellek": ["Bütün piyasalar tek tip sembollerle Yahoo Finance'ten çekiliyor; gram altın gibi Türkiye'ye özgü fiyatlar ons fiyatı ve kurdan hesaplanıyor.", "Yahoo çok istek gelince geçici olarak engellediği için bir devre kesici yazdım: engellenince süre dolana kadar istek göndermiyor, önbellekteki veriyi gösteriyor.", "KAP, SPK, Google Haberler, ForexFactory ve TCMB de diğer veri kaynakları."],
+  "Teknik analiz ve strateji": ["Göstergeler pandas ile vektörel olarak hesaplanıyor: SMA, EMA, RSI, MACD, Bollinger, ATR.", "Bunların üzerine mum formasyonu tanıma, destek-direnç bulma, yüzlerce hisseyi tarama ve strateji testi kurulu.", "Strateji testinde sinyal gün sonunda üretiliyor ve pozisyon ertesi gün açılıyor; böylece geleceği görme hatası önleniyor."],
+  "Yapay zekâ: fiyat tahmini": ["Tahmin kısmında hedef iki şey: yarın fiyat yükselecek mi düşecek mi, ve yüzde kaç değişecek.", "Fiyat geçmişinden 13 öznitelik türetiyorum. Veriyi karıştırmadan, zaman sırasını koruyarak bölüyorum: ilk %80 eğitim, son %20 test. Rastgele bölseydim model geleceği görerek eğitilirdi.", "Altı model eğitiliyor ve hepsi 'yarın da bugünkü gibi olur' diyen naif bir modelle kıyaslanıyor. Naif modeli geçemeyen model bir şey öğrenmemiş demektir."],
+  "Deney sonuçları": ["Bu sonuçlar tahmini değil, projenin kendi kodunu altı varlığın gerçek verisiyle çalıştırarak ölçtüm.", "Üstteki tabloda seçilen modelin çoğu varlıkta naif modeli geçtiğini görüyoruz. Ama dürüst olmak gerekirse test kümesi küçük, güven aralığı yaklaşık artı eksi 10 puan; yani sonuçlar umut verici ama kesin değil.", "Dolar/TL örneği önemli: kur sürekli yükseldiği için naif model bile çok yüksek doğruluk veriyor. Bu da yön doğruluğunun tek başına yanıltıcı olabileceğini, referans modelin neden şart olduğunu gösteriyor."],
+  "LLM asistanı ve duygu analizi": ["Büyük dil modeli olarak Anthropic Claude API kullanıyorum ama önemli bir tasarım kararı var: anahtar yoksa her özellik kural tabanlı olarak yine çalışıyor.", "Asistana soru sorulduğunda, seçili varlığın gerçek verileri de modele gönderiliyor; böylece model uydurmak yerine verilen sayılar üzerinden yorum yapıyor.", "Haber duygu analizinde de LLM varsa onu, yoksa Türkçe finans sözlüğünü kullanıyorum."],
+  "Arka plan motoru": ["Kullanıcı ekrana bakmasa da yapılması gereken işler var: bekleyen emirler, botlar, fiyat alarmları, takaslar.", "Bunun için ayrı bir iş parçacığı dakikada bir çalışıyor. Daha ağır işler 10 veya 30 dakikada bir yapılıyor.", "Her görev ayrı hata yakalama bloğunda; biri hata verse de diğerleri çalışmaya devam ediyor."],
+  "Veritabanı": ["Veritabanı olarak kurulum gerektirmeyen SQLite kullandım; 19 tablo var.", "Şemayı standart SQL ile yazdığım için web sürümünde PostgreSQL'e geçiş sadece bağlantı satırını değiştirmeyi gerektiriyor.", "Sanal hesap gerçek bir aracı kurum gibi davranıyor: 100.000 TL ile başlıyor, yabancı varlıklarda kur çevrimi yapılıyor ve takas T+2 kuralıyla gerçekleşiyor."],
+  "Kimlik doğrulama ve güvenlik": ["Şifreler açık metin olarak saklanmıyor: her kullanıcıya rastgele bir tuz üretilip şifre PBKDF2 ile 200.000 kez özetleniyor. Bu demoda bunu canlı olarak gösterebilirim.", "Oturum, imzalı bir JWT ile yönetiliyor; arayüz her istekte bunu gönderiyor ve sunucu imzayı doğruluyor.", "Ayrıca 5 hatalı denemede hesap kilitleniyor ve 'tüm oturumları kapat' özelliğiyle eski jetonlar geçersiz kılınabiliyor."],
+  "Arayüz (React)": ["Arayüz React ve TypeScript ile yazılmış tek sayfa uygulaması; sayfa değişince sunucudan sadece JSON veri isteniyor.", "Grafikler için TradingView'in açık kaynak Lightweight Charts kütüphanesini kullandım.", "Bütün API istekleri tek bir fonksiyondan geçiyor; jetonu ekliyor, oturum düşerse kullanıcıyı çıkış yaptırıyor ve hataları Türkçe mesaja çeviriyor."],
+  "Kullanılan teknolojiler": ["Kullandığım teknolojilerin hepsi açık kaynak ve ücretsiz; sadece Claude API isteğe bağlı ve ücretli.", "Arka uçta Python, FastAPI, pandas, scikit-learn ve statsmodels; arayüzde React, TypeScript ve Vite; masaüstü tarafında pywebview ve PyInstaller."],
+  "Paketleme (exe oluşturma)": ["Exe'yi tek bir betikle üretiyorum: önce arayüz Vite ile derleniyor, sonra PyInstaller Python yorumlayıcısını, kütüphaneleri ve derlenmiş arayüzü birlikte paketliyor.", "Böylece Python veya Node.js kurulu olmayan bir bilgisayarda da çalışıyor.", "PyTorch'u pakete koymadım: LSTM testlerde diğer modellerden iyi değildi ve uygulamayı 420 MB büyütüyordu."],
+  "Sonuç ve değerlendirme": ["Sonuç olarak kurulum gerektirmeyen, çalışır bir platform ortaya çıktı ve tahmin modelleri şeffaf biçimde değerlendiriliyor.", "Sınırlılıkların da farkındayım: test kümesi küçük, en iyi model test verisine göre seçildiği için raporlanan doğruluk biraz iyimser ve modele şimdilik sadece fiyat tabanlı öznitelikler giriyor.", "Bir sonraki adım olarak kayan pencere doğrulaması, haber duygu skorunun öznitelik olarak eklenmesi ve web sürümü planlıyorum."],
+  "Web sürümüne geçiş": ["Uygulamayı baştan istemci–sunucu olarak tasarladığım için web sürümüne geçiş büyük bir yeniden yazım gerektirmiyor.", "Gerekenler: PostgreSQL, HTTPS, arka plan işleri için bir iş kuyruğu ve lisanslı veri.", "Sorularınız varsa alabilirim; ayrıca istediğiniz bir kısmın kodunu da hemen açıp gösterebilirim."],
+  "Kaynak kod gezgini": ["Burada projenin bütün kaynak kodu var. Sol taraftan bir dosya, sağ taraftan bir fonksiyon seçip o satıra gidebiliyorum.", "Arama kutusu tüm dosyalarda arıyor; örneğin 'pbkdf2' yazınca şifre özetleme kodunu buluyor."],
+};
+let notesOn = false; try { notesOn = localStorage.getItem("tm-notes") === "1"; } catch (e) {}
+function renderNotes() {
+  $("#notes").classList.toggle("on", notesOn);
+  $("#notesBtn").classList.toggle("on", notesOn);
+  if (!notesOn) return;
+  const t = sections[cur].dataset.title, n = NOTES[t] || ["Bu slayt için not yok."];
+  $("#notesH").textContent = `🎤 Konuşma notu · ${t}`;
+  $("#notesBody").innerHTML = n.map(p => `<p>${p}</p>`).join("");
+}
+function toggleNotes() { notesOn = !notesOn; try { localStorage.setItem("tm-notes", notesOn ? "1" : "0"); } catch (e) {} renderNotes(); }
+$("#notesBtn").onclick = toggleNotes; $("#notesX").onclick = toggleNotes;
+
+let start = 0; try { start = +localStorage.getItem("tm-slide") || 0; } catch (e) {}
+go(start);
+</script>
+<script src="ekler.js"></script>
+</body>
+</html>

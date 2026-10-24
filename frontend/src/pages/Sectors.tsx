@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, fmtPct, tone } from '../api'
 import { ErrorBox } from '../components/common'
 import { Skeleton } from '../components/ui'
+import { openStock } from '../components/StockCard'
 
 type Sec = { sector: string; count: number; '1w': number; '1m': number; '3m': number; '6m': number; momentum: number; quadrant: string; best: string }
 const QCOL: Record<string, string> = { 'Lider': '#26a69a', 'Zayıflayan': '#f5c542', 'Geride kalan': '#ef5350', 'Toparlanan': '#4c8dff' }
@@ -60,7 +61,7 @@ export default function Sectors() {
             <table className="table">
               <thead><tr><th>Sektör</th><th className="r">1 hafta</th><th className="r">1 ay</th><th className="r">3 ay</th><th className="r">6 ay</th><th>Durum</th></tr></thead>
               <tbody>{data.map(s => (
-                <tr key={s.sector} className="clickable" onClick={() => nav(`/analiz?s=${encodeURIComponent(s.best)}`)} title={`Sektörün son 1 ayda en güçlü hissesi: ${s.best}`}>
+                <tr key={s.sector} className="clickable" onClick={() => openStock(s.best)} title={`Sektörün son 1 ayda en güçlü hissesi: ${s.best}`}>
                   <td><b>{s.sector}</b> <span className="muted small">({s.count})</span></td>
                   {(['1w', '1m', '3m', '6m'] as const).map(k => <td key={k} className={`r mono ${tone(s[k])}`} style={{ background: `rgba(${s[k] >= 0 ? '38,166,154' : '239,83,80'},${Math.min(Math.abs(s[k]) / 25, 0.35)})` }}>{fmtPct(s[k])}</td>)}
                   <td><span className="pill" style={{ background: QCOL[s.quadrant] + '33', color: QCOL[s.quadrant] }}>{s.quadrant}</span></td>

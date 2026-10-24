@@ -7,18 +7,19 @@ açıldığında son kayıt anında gösterilir ve süresi geçmişse arka pland
 import json
 import threading
 import time
+from datetime import datetime, timezone
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
 
-from . import market
+from . import market, yahoo
 from .db import connect
 
 _DATA = json.loads((Path(__file__).resolve().parent / "data" / "universe.json").read_text(encoding="utf-8"))
 UNIVERSE = {"bist": _DATA["bist"], "us": _DATA["us"]}
-STALE_AFTER = 300  # saniye
+STALE_AFTER = 120  # saniye (tüm hisse listesi en geç 2 dakikada bir tazelenir)
 SPARK_URL = "https://query1.finance.yahoo.com/v7/finance/spark?symbols={}&range=1y&interval=1d"
 
 _state: dict[str, dict] = {k: {"refreshing": False, "error": None} for k in UNIVERSE}
@@ -26,8 +27,8 @@ _lock = threading.Lock()
 
 for key, items in UNIVERSE.items():
     for a in items:
-        if a["symbol"] in market.ASSET_BY_SYMBOL:
-            a["sector"] = market.ASSET_BY_SYMBOL[a["symbol"]].get("sector") or a.get("sector")
+        if a["symbol"] in market.ASSET_BY_SYMBOL and not a.get("sector"):
+            a["sector"] = market.ASSET_BY_SYMBOL[a["symbol"]].get("sector")
         a.setdefault("sector", "Diğer")
 
 
@@ -42,11 +43,36 @@ def _spark(batch: list[str]) -> list[dict]:
     req = urllib.request.Request(SPARK_URL.format(",".join(batch)), headers={"User-Agent": "Mozilla/5.0"})
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read())["spark"]["result"] or []
-        except Exception:
+            with yahoo.slot():
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    res = json.loads(r.read())["spark"]["result"] or []
+            yahoo.ok()
+            return res
+        except yahoo.YahooBusy:
+            return []
+        except Exception as e:
+            yahoo.fail(e)
             time.sleep(1 + attempt)
     return []
+
+
+def _series(item: dict) -> pd.Series:
+    """Günlük kapanışlar (borsanın yerel tarihine göre). Yahoo'nun bugün için boş gönderdiği/eksik bıraktığı son gün,
+    aynı yanıttaki anlık fiyatla (regularMarketPrice) tamamlanır — böylece liste her zaman güncel kapanışı gösterir."""
+    resp = item["response"][0]
+    m = resp.get("meta") or {}
+    off = m.get("gmtoffset") or 0
+    idx = pd.to_datetime([t + off for t in resp["timestamp"]], unit="s").normalize()
+    closes = pd.Series(resp["indicators"]["quote"][0]["close"], index=idx, dtype="float64").dropna()
+    closes = closes[~closes.index.duplicated(keep="last")]
+    price, t = m.get("regularMarketPrice"), m.get("regularMarketTime")
+    if price and t:
+        d = pd.Timestamp(datetime.fromtimestamp(t + off, timezone.utc).date())
+        if not len(closes) or d > closes.index[-1]:
+            closes.loc[d] = float(price)
+        elif d == closes.index[-1]:
+            closes.iloc[-1] = float(price)
+    return closes
 
 
 def _quote(asset: dict, item: dict | None, mkt: str) -> dict:
@@ -55,8 +81,7 @@ def _quote(asset: dict, item: dict | None, mkt: str) -> dict:
          "change_1w": None, "change_1m": None, "change_ytd": None, "change_1y": None, "high_52w": None, "low_52w": None,
          "volume": None, "volume_avg": None, "spark": []}
     try:
-        resp = item["response"][0]
-        closes = pd.Series(resp["indicators"]["quote"][0]["close"], index=pd.to_datetime(resp["timestamp"], unit="s")).dropna()
+        closes = _series(item)
     except Exception:
         return q
     if len(closes) < 2:
@@ -90,10 +115,9 @@ def _refresh(mkt: str) -> None:
             series = {}
             for sym, item in by_sym.items():
                 try:
-                    resp = item["response"][0]
-                    pairs = [(t, c) for t, c in zip(resp["timestamp"], resp["indicators"]["quote"][0]["close"]) if c is not None]
-                    if len(pairs) >= 30:
-                        series[sym] = {"t": [p[0] for p in pairs], "c": [round(p[1], 6) for p in pairs]}
+                    ser = _series(item)
+                    if len(ser) >= 30:
+                        series[sym] = {"t": [int(ts.timestamp()) for ts in ser.index], "c": [round(float(c), 6) for c in ser]}
                 except Exception:
                     continue
             con.execute("INSERT OR REPLACE INTO universe_closes VALUES (?,?,?)", (mkt, time.time(), json.dumps(series)))
@@ -132,6 +156,16 @@ def all_quotes(mkt: str, force: bool = False, wait: bool = False) -> dict:
         return {"quotes": [], "fetched_at": None, "refreshing": False, "error": _state[mkt]["error"], "count": len(UNIVERSE[mkt])}
     return {"quotes": json.loads(row["payload"]), "fetched_at": row["fetched_at"], "refreshing": _state[mkt]["refreshing"],
             "error": _state[mkt]["error"], "count": len(UNIVERSE[mkt])}
+
+
+def cached_quotes(mkt: str) -> list[dict]:
+    """Beklemeden: kayıtlı son fiyatlar (yoksa boş liste); eskiyse arka planda yenileme başlatılır."""
+    _init_table()
+    with connect() as con:
+        row = con.execute("SELECT fetched_at, payload FROM universe_cache WHERE market=?", (mkt,)).fetchone()
+    if row is None or time.time() - row["fetched_at"] > STALE_AFTER:
+        refresh_async(mkt)
+    return json.loads(row["payload"]) if row else []
 
 
 def search_entries() -> list[dict]:

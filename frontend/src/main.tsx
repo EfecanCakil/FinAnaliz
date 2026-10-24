@@ -4,9 +4,11 @@ import App from './App'
 import './styles.css'
 import { getTheme } from './theme'
 import { applyPrefs } from './components/fx'
+import { installErrorReporting } from './components/ErrorBoundary'
 
 document.documentElement.dataset.theme = getTheme()
 applyPrefs()
+installErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

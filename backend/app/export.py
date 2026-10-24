@@ -1,6 +1,6 @@
 """Rapor dışa aktarma: Excel (openpyxl) ve PDF (reportlab).
 
-Dosyalar kullanıcının İndirilenler\\FinAnaliz klasörüne kaydedilir; arayüz kaydedilen
+Dosyalar kullanıcının İndirilenler\\TradeMetrix klasörüne kaydedilir; arayüz kaydedilen
 dosyanın yolunu gösterir ve klasörü açabilir.
 """
 import os
@@ -21,8 +21,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-EXPORT_DIR = Path.home() / "Downloads" / "FinAnaliz"
-DISCLAIMER = "Bu rapor FinAnaliz tarafından yalnızca eğitim ve bilgilendirme amacıyla üretilmiştir; yatırım tavsiyesi değildir."
+EXPORT_DIR = Path.home() / "Downloads" / "TradeMetrix"
+DISCLAIMER = "Bu rapor TradeMetrix tarafından yalnızca eğitim ve bilgilendirme amacıyla üretilmiştir; yatırım tavsiyesi değildir."
 
 # Türkçe karakterler için Windows sistem yazı tipi
 _FONT, _FONT_BOLD = "Helvetica", "Helvetica-Bold"
@@ -181,7 +181,7 @@ def pdf(name: str, title: str, subtitle: str, blocks: list) -> Path:
         story.append(Spacer(1, 4))
     story += [Spacer(1, 12), Paragraph(DISCLAIMER, st["muted"])]
     doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=1.8 * cm, rightMargin=1.8 * cm,
-                            topMargin=1.5 * cm, bottomMargin=1.5 * cm, title=title, author="FinAnaliz")
+                            topMargin=1.5 * cm, bottomMargin=1.5 * cm, title=title, author="TradeMetrix")
     doc.build(story)
     return path
 
@@ -198,7 +198,7 @@ def analysis_pdf(symbol: str, name: str, currency: str, candles: list[dict], sum
                  ["Dönem en yüksek", _num(st["high"], 4)], ["Dönem en düşük", _num(st["low"], 4)],
                  ["Yıllık oynaklık", _pct(st["volatility"]).lstrip("+")], ["ATR (14)", _num(st["atr"], 4)]]
     return pdf(f"Analiz_{symbol}", f"{name} ({symbol}) Teknik Analiz Raporu",
-               f"FinAnaliz · {datetime.now():%d.%m.%Y %H:%M} · Son 1 yıllık günlük veri", [
+               f"TradeMetrix · {datetime.now():%d.%m.%Y %H:%M} · Son 1 yıllık günlük veri", [
                    ("h2", "Fiyat Grafiği (1 yıl, kapanış)"),
                    ("chart", {"series": [closes], "line_colors": [BLUE]}),
                    ("h2", f"Genel Görünüm: {summary['overall']}"),
@@ -246,7 +246,7 @@ def portfolio_pdf(items: list[dict], analytics: dict, username: str) -> Path:
                ("h2", "Dağılım"),
                ("table", {"rows": [["Piyasa", "Değer (TL)", "Pay"]] + [[a["label"], _num(a["value"]), _num(a["pct"]) + "%"]
                                                                        for a in analytics["allocation"]["market"]]})]
-    return pdf("Portfoy_Raporu", f"Portföy Raporu – {username}", f"FinAnaliz · {datetime.now():%d.%m.%Y %H:%M}", blocks)
+    return pdf("Portfoy_Raporu", f"Portföy Raporu – {username}", f"TradeMetrix · {datetime.now():%d.%m.%Y %H:%M}", blocks)
 
 
 def open_folder(path: str | None = None) -> None:

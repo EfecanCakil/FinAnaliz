@@ -98,7 +98,7 @@ def _fetch_rss(query: str, lang: str) -> list[dict]:
     params = {"q": query + " when:7d", "hl": "tr" if lang == "tr" else "en-US",
               "gl": "TR" if lang == "tr" else "US", "ceid": "TR:tr" if lang == "tr" else "US:en"}
     url = "https://news.google.com/rss/search?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 FinAnaliz"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 TradeMetrix"})
     with urllib.request.urlopen(req, timeout=10) as r:
         root = ET.fromstring(r.read())
     items = []

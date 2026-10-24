@@ -1,14 +1,25 @@
 // Görsel efektler: sayarak artan sayılar, konfeti, bildirim sesi, piyasa saati, karşılama ekranı ve giriş arka planı
 import { useEffect, useRef, useState } from 'react'
-import { fmtMoney } from '../api'
+import { api, fmtMoney } from '../api'
+import { LogoMark } from './Logo'
 
 /* ------------------------------------------------------------------ Tercihler */
 const PREF = 'finanaliz_prefs'
-export type Prefs = { accent: string; sound: boolean; confetti: boolean; animations: boolean; sidebarCollapsed: boolean }
-const DEFAULT_PREFS: Prefs = { accent: 'blue', sound: false, confetti: true, animations: true, sidebarCollapsed: false }
+export type Prefs = { accent: string; sound: boolean; confetti: boolean; animations: boolean; sidebarCollapsed: boolean; advanced: boolean; tips: boolean }
+// İşletim sisteminde "hareketi azalt" seçiliyse animasyonlar varsayılan olarak kapalı başlar
+const reduceMotion = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const DEFAULT_PREFS: Prefs = { accent: 'trademetrix', sound: false, confetti: true, animations: !reduceMotion, sidebarCollapsed: false, advanced: false, tips: true }
 
 export function getPrefs(): Prefs {
-  try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF) || '{}') } } catch { return DEFAULT_PREFS }
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREF) || '{}')
+    // TradeMetrix'e geçişte eski varsayılan mavi, logoya uygun turkuaza bir kez taşınır (kullanıcı sonra değiştirebilir)
+    if (saved.accent === 'blue' && !saved.brandAccent) {
+      saved.accent = 'trademetrix'; saved.brandAccent = true
+      localStorage.setItem(PREF, JSON.stringify(saved))
+    }
+    return { ...DEFAULT_PREFS, ...saved }
+  } catch { return DEFAULT_PREFS }
 }
 export function setPrefs(p: Partial<Prefs>) {
   const next = { ...getPrefs(), ...p }
@@ -27,6 +38,7 @@ export function usePrefs(): Prefs {
 }
 
 export const ACCENTS: Record<string, { name: string; color: string; dark: string }> = {
+  trademetrix: { name: 'TradeMetrix (turkuaz)', color: '#14b8a6', dark: '#0f8f82' },
   blue: { name: 'Mavi', color: '#4c8dff', dark: '#3a74db' },
   purple: { name: 'Mor', color: '#8b5cf6', dark: '#7046e0' },
   green: { name: 'Yeşil', color: '#10b981', dark: '#0d9668' },
@@ -36,7 +48,7 @@ export const ACCENTS: Record<string, { name: string; color: string; dark: string
 }
 
 export function applyPrefs(p: Prefs = getPrefs()) {
-  const a = ACCENTS[p.accent] ?? ACCENTS.blue
+  const a = ACCENTS[p.accent] ?? ACCENTS.trademetrix
   const root = document.documentElement
   root.style.setProperty('--accent', a.color)
   root.style.setProperty('--accent-2', a.dark)
@@ -225,24 +237,92 @@ export function Typewriter({ texts, speed = 45 }: { texts: string[]; speed?: num
 }
 
 /* ------------------------------------------------------------------ Karşılama ekranı */
-export function Welcome({ user, equity, pnlPct, onDone }: { user: string; equity: number | null | undefined; pnlPct: number | null | undefined; onDone: () => void }) {
+type TodayLine = { icon: string; text: string; tone: string }
+
+export function Welcome({ user, guest, equity, pnlPct, onDone }: { user: string; guest?: boolean; equity: number | null | undefined; pnlPct: number | null | undefined; onDone: () => void }) {
   const v = useCountUp(equity ?? 0, 1400)
   const [closing, setClosing] = useState(false)
-  const close = () => { setClosing(true); setTimeout(onDone, 450) }
-  // Veri gelince 2,2 sn gösterilir; veri gecikirse en fazla 6 sn beklenir
-  useEffect(() => { const id = setTimeout(close, equity != null ? 2200 : 6000); return () => clearTimeout(id) }, [equity != null])
+  const [lines, setLines] = useState<TodayLine[] | null>(null)
+  const closed = useRef(false)
+  const close = () => { if (closed.current) return; closed.current = true; setClosing(true); setTimeout(onDone, 500) }
+  // Günün özeti (ilk 3 cümle) gelirse gösterilir; gelmezse beklenmez
+  useEffect(() => {
+    let alive = true
+    api<{ lines: TodayLine[] }>('/today').then(t => { if (alive) setLines(t.lines.slice(0, 3)) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  const hold = equity == null ? 6000 : lines ? 3600 : 2600
+  useEffect(() => { const id = setTimeout(close, hold); return () => clearTimeout(id) }, [hold])
   const hour = new Date().getHours()
   const greet = hour < 6 ? 'İyi geceler' : hour < 12 ? 'Günaydın' : hour < 18 ? 'İyi günler' : 'İyi akşamlar'
   return (
     <div className={`welcome ${closing ? 'closing' : ''}`} onClick={close}>
       <div className="welcome-inner">
-        <div className="welcome-logo">◆</div>
-        <h1>{greet}, {user}!</h1>
+        <LogoMark size={76} className="welcome-logo" />
+        <h1>{greet}, {guest ? 'hoş geldin' : user}! <span className="wave">👋</span></h1>
         <div className="muted">Toplam varlığınız</div>
         {equity != null ? <div className="welcome-value">{fmtMoney(v, 'TRY')}</div> : <div className="sk-line welcome-sk" />}
         {pnlPct != null && <div className={pnlPct >= 0 ? 'up' : 'down'}>{pnlPct >= 0 ? '▲' : '▼'} %{Math.abs(pnlPct).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} toplam getiri</div>}
+        {lines && lines.length > 0 && (
+          <ul className="welcome-lines">
+            {lines.map((l, i) => <li key={i} style={{ animationDelay: `${0.15 + i * 0.18}s` }}><span>{l.icon}</span><span className={l.tone}>{l.text}</span></li>)}
+          </ul>
+        )}
         <div className="muted small mt">Devam etmek için tıklayın</div>
       </div>
+      <div className="welcome-progress"><div key={hold} style={{ animationDuration: `${hold}ms` }} /></div>
     </div>
   )
+}
+
+/* ------------------------------------------------------------------ Mikro etkileşimler */
+/** Uygulama genelinde: ★ tıklanınca pırıltı, alarm kurulunca zil sallanması, kaydırınca kartların belirmesi. */
+export function useMicroFx() {
+  useEffect(() => {
+    const anim = () => document.documentElement.dataset.anim !== 'off'
+    const onClick = (e: MouseEvent) => {
+      const star = (e.target as HTMLElement).closest?.('.star') as HTMLElement | null
+      if (star && anim()) { star.classList.remove('pop'); void star.offsetWidth; star.classList.add('pop'); setTimeout(() => star.classList.remove('pop'), 600) }
+    }
+    const onAlarm = () => {
+      chime('info')
+      const bell = document.querySelector('.bell-btn') as HTMLElement | null
+      if (bell && anim()) { bell.classList.remove('ring'); void bell.offsetWidth; bell.classList.add('ring'); setTimeout(() => bell.classList.remove('ring'), 900) }
+    }
+    document.addEventListener('click', onClick, true)
+    window.addEventListener('finanaliz:alarm-set', onAlarm)
+
+    // Kaydırınca belirme: ekranın altında kalan kartlar görünür alana girince yumuşakça yükselir
+    const root = document.querySelector('.content')
+    let io: IntersectionObserver | null = null, mo: MutationObserver | null = null
+    if (root && 'IntersectionObserver' in window) {
+      io = new IntersectionObserver(entries => {
+        for (const en of entries) if (en.isIntersecting) { en.target.classList.add('reveal-in'); io!.unobserve(en.target) }
+      }, { root, rootMargin: '0px 0px -40px 0px', threshold: 0.05 })
+      const scan = () => {
+        if (!anim()) return
+        const limit = root.getBoundingClientRect().bottom
+        root.querySelectorAll<HTMLElement>('.page .card:not([data-rv])').forEach(el => {
+          el.dataset.rv = '1'
+          if (el.getBoundingClientRect().top > limit) { el.classList.add('reveal'); io!.observe(el) }
+        })
+      }
+      let t = 0
+      mo = new MutationObserver(() => { clearTimeout(t); t = window.setTimeout(scan, 60) })
+      mo.observe(root, { childList: true, subtree: true })
+      scan()
+    }
+    return () => {
+      document.removeEventListener('click', onClick, true)
+      window.removeEventListener('finanaliz:alarm-set', onAlarm)
+      io?.disconnect(); mo?.disconnect()
+    }
+  }, [])
+}
+
+/** Kutlama anı: konfeti + ses + kısa mesaj (ayarlara göre). */
+export function celebrate(kind: 'first-trade' | 'profit' = 'profit') {
+  const p = getPrefs()
+  if (p.confetti) confetti(kind === 'first-trade' ? 180 : 110)
+  chime('good')
 }

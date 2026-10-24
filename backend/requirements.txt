@@ -13,3 +13,5 @@ pillow
 openpyxl
 reportlab
 windows-toasts>=1.3; sys_platform == "win32"
+pypdf>=5.0
+segno

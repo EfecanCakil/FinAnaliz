@@ -88,6 +88,17 @@ def _metrics(y_ret, pred_ret, y_dir, pred_dir, prices_prev):
     }
 
 
+def _next_session(df: pd.DataFrame) -> int:
+    """Son mumdan sonraki işlem günü (hafta sonu işlem görmeyen varlıklarda cumartesi/pazar atlanır)."""
+    t = int(df["time"].iloc[-1])
+    days = (pd.to_datetime(df["time"].iloc[-30:], unit="s") + pd.Timedelta(hours=12)).dt.dayofweek  # yerel işlem günü
+    trades_weekend = bool((days >= 5).any())
+    nxt = t + 86400
+    while not trades_weekend and (pd.Timestamp(nxt, unit="s") + pd.Timedelta(hours=12)).dayofweek >= 5:
+        nxt += 86400
+    return nxt
+
+
 def predict(df: pd.DataFrame, test_ratio: float = 0.2) -> dict:
     feats = build_features(df)
     data = feats.dropna(subset=FEATURES + ["target_ret"])
@@ -143,6 +154,7 @@ def predict(df: pd.DataFrame, test_ratio: float = 0.2) -> dict:
 
     if best_name in next_out:
         up_prob, exp_ret = next_out[best_name]
+        explain_clf, explain_name = _models()["Rastgele Orman"][0].fit(X, y_dir), "Rastgele Orman"
     else:
         # En iyi modeli tüm veriyle yeniden eğitip bir sonraki gün için tahmin üret
         clf, reg = _models()[best_name]
@@ -150,6 +162,11 @@ def predict(df: pd.DataFrame, test_ratio: float = 0.2) -> dict:
         reg.fit(X, y_ret)
         up_prob = float(clf.predict_proba(last_x)[0][1])
         exp_ret = float(reg.predict(last_x)[0])
+        explain_clf, explain_name = clf, best_name
+    try:
+        explanation = explain(explain_clf, X, last_x, explain_name)
+    except Exception:
+        explanation = None
     last_price = float(df["close"].iloc[-1])
 
     # Öznitelik önemleri, yorumlanabilirlik için Rastgele Orman sınıflandırıcısından alınır
@@ -160,7 +177,7 @@ def predict(df: pd.DataFrame, test_ratio: float = 0.2) -> dict:
     )
 
     times = df.loc[data.index[split:], "time"].values
-    next_times = list(times[1:]) + [int(times[-1]) + 86400]
+    next_times = list(times[1:]) + [_next_session(df)]
     chart = {
         "actual": [{"time": int(t), "value": round(float(p * (1 + r)), 6)}
                    for t, p, r in zip(next_times, prices[split:], y_ret[split:])],
@@ -175,15 +192,151 @@ def predict(df: pd.DataFrame, test_ratio: float = 0.2) -> dict:
         "test_size": len(Xte),
         "forecast": {
             "last_price": last_price,
+            "data_date": (pd.Timestamp(int(df["time"].iloc[-1]), unit="s") + pd.Timedelta(hours=12)).strftime("%Y-%m-%d"),
+            "target_date": (pd.Timestamp(_next_session(df), unit="s") + pd.Timedelta(hours=12)).strftime("%Y-%m-%d"),
             "up_probability": round(up_prob * 100, 2),
             "direction": "Yükseliş" if up_prob >= 0.5 else "Düşüş",
             "expected_return_pct": round(exp_ret * 100, 4),
             "expected_price": round(last_price * (1 + exp_ret), 6),
         },
         "feature_importance": importance,
+        "explanation": explanation,
         "model_info": info,
         "all_forecasts": {k: {"up_probability": round(v[0] * 100, 2), "expected_return_pct": round(v[1] * 100, 4)}
                           for k, v in next_out.items()},
         "chart": chart,
         "disclaimer": "Bu tahminler istatistiksel modellere dayanır, yatırım tavsiyesi değildir.",
     }
+
+
+# ----------------------------------------------------------------------------- açıklanabilir yapay zekâ
+def _describe(feature: str, v: float) -> str:
+    """Özniteliğin bugünkü değerini sade Türkçeyle anlatır."""
+    def pct(x: float, d: int = 1) -> str:
+        return f"%{abs(x) * 100:.{d}f}".replace(".", ",")
+    sign = "+" if v >= 0 else "−"
+    if feature.startswith("ret"):
+        return f"Son {feature[3:]} günlük getiri {sign}{pct(v)}"
+    if feature == "rsi":
+        r = v * 100
+        return f"RSI {r:.0f}" + (" (aşırı alım bölgesi)" if r >= 70 else " (aşırı satım bölgesi)" if r <= 30 else "")
+    if feature == "macd_hist":
+        return "MACD histogramı pozitif (yükseliş momentumu)" if v >= 0 else "MACD histogramı negatif (düşüş momentumu)"
+    if feature in ("dist_sma20", "dist_sma50"):
+        return f"Fiyat {feature[-2:]} günlük ortalamanın {pct(v)} {'üzerinde' if v >= 0 else 'altında'}"
+    if feature == "bb_pos":
+        return f"Bollinger bandı içindeki konum %{v * 100:.0f}" + (" (üst banda yakın)" if v >= 0.8 else " (alt banda yakın)" if v <= 0.2 else "")
+    if feature == "vol10":
+        return f"Son 10 günde günlük ortalama oynaklık {pct(v)}"
+    if feature == "vol_chg":
+        return f"İşlem hacmi 20 günlük ortalamanın {pct(v, 0)} {'üzerinde' if v >= 0 else 'altında'}"
+    if feature == "range":
+        return f"Son günün fiyat aralığı {pct(v)}"
+    return f"{feature} = {v:.4g}"
+
+
+def explain(clf, X: np.ndarray, last_x: np.ndarray, model_name: str) -> dict:
+    """Bugünkü tahmine her özniteliğin katkısı (yerel açıklama). Her öznitelik sırayla eğitim verisindeki tipik
+    (medyan) değerine çekilir; yükseliş olasılığındaki değişim, o özniteliğin tahmine katkısı sayılır."""
+    base_x = np.median(X, axis=0, keepdims=True)
+    p_now = float(clf.predict_proba(last_x)[0][1])
+    p_base = float(clf.predict_proba(base_x)[0][1])
+    trial = np.repeat(last_x, len(FEATURES), axis=0)
+    for i in range(len(FEATURES)):
+        trial[i, i] = base_x[0, i]
+    p_without = clf.predict_proba(trial)[:, 1]
+    factors = []
+    for i, f in enumerate(FEATURES):
+        c = (p_now - float(p_without[i])) * 100
+        factors.append({"feature": f, "value": float(last_x[0, i]), "contribution": round(c, 2),
+                        "text": _describe(f, float(last_x[0, i]))})
+    factors.sort(key=lambda d: -abs(d["contribution"]))
+    top = [d for d in factors if abs(d["contribution"]) >= 0.05][:6]
+    ups = [d for d in top if d["contribution"] > 0]
+    downs = [d for d in top if d["contribution"] < 0]
+    summary = f"Model yarın için %{p_now * 100:.0f} yükseliş olasılığı veriyor (tipik bir günde bu oran %{p_base * 100:.0f})."
+    if ups:
+        summary += f" En çok yukarı iten: {ups[0]['text'][0].lower() + ups[0]['text'][1:]}."
+    if downs:
+        summary += f" En çok aşağı çeken: {downs[0]['text'][0].lower() + downs[0]['text'][1:]}."
+    return {"model": model_name, "probability": round(p_now * 100, 2), "baseline": round(p_base * 100, 2),
+            "factors": factors, "top": top, "summary": summary,
+            "method": "Her gösterge tek tek tipik değerine çekilerek tahminin ne kadar değiştiği ölçüldü (yerel duyarlılık analizi)."}
+
+
+# ----------------------------------------------------------------------------- model başarı karnesi
+_card_cache: dict[tuple, tuple[float, dict]] = {}
+CARD_TTL = 6 * 3600
+
+
+def scorecard(df: pd.DataFrame, key: tuple, test_days: int = 126, step: int = 21) -> dict:
+    """İleriye yürüyen (walk-forward) test: son ~6 ayda her ay yalnızca o güne kadarki veriyle yeniden eğitilen modeller
+    ertesi günün yönünü tahmin eder. Sonuçlar yazı-tura ve basit kurallarla karşılaştırılır."""
+    from scipy.stats import binomtest
+    hit = _card_cache.get(key)
+    if hit and time.time() - hit[0] < CARD_TTL:
+        return hit[1]
+    feats = build_features(df)
+    data = feats.dropna(subset=FEATURES + ["target_ret"])
+    if len(data) < test_days + 200:
+        raise ValueError("Başarı karnesi için en az ~1,5 yıllık fiyat geçmişi gerekir; daha uzun bir veri dönemi seçin.")
+    X, y_ret = data[FEATURES].values, data["target_ret"].values
+    y_dir = (y_ret > 0).astype(int)
+    start = len(data) - test_days
+    names = ["Lojistik/Ridge Regresyon", "Rastgele Orman", "Gradyan Artırma"]
+    probs = {n: np.full(test_days, np.nan) for n in names}
+    for a in range(start, len(data), step):
+        b = min(a + step, len(data))
+        for n in names:
+            clf = _models()[n][0]
+            clf.fit(X[:a], y_dir[:a])
+            probs[n][a - start:b - start] = clf.predict_proba(X[a:b])[:, 1]
+    actual, rets = y_dir[start:], y_ret[start:]
+    n = len(actual)
+    up_rate = float(actual.mean() * 100)
+    persist = (data["ret1"].values[start:] > 0).astype(int)
+    times = df.loc[data.index[start:], "time"].values
+    next_times = list(times[1:]) + [int(times[-1]) + 86400]
+
+    models = []
+    for name in names:
+        p = probs[name]
+        pred = (p >= 0.5).astype(int)
+        correct = int((pred == actual).sum())
+        pval = float(binomtest(correct, n, 0.5, alternative="greater").pvalue)
+        conf = (p >= 0.6) | (p <= 0.4)
+        conf_acc = float((pred[conf] == actual[conf]).mean() * 100) if conf.sum() >= 5 else None
+        strat = np.cumprod(1 + np.where(pred == 1, rets, 0.0)) - 1
+        monthly = [{"from": int(next_times[a]), "accuracy": round(float((pred[a:a + step] == actual[a:a + step]).mean() * 100), 1),
+                    "days": int(len(actual[a:a + step]))} for a in range(0, n, step)]
+        models.append({"model": name, "accuracy": round(correct / n * 100, 2), "correct": correct, "days": n,
+                       "p_value": round(pval, 4), "confident_accuracy": round(conf_acc, 2) if conf_acc is not None else None,
+                       "confident_days": int(conf.sum()), "strategy_return": round(float(strat[-1] * 100), 2), "monthly": monthly,
+                       "equity": [{"time": int(t), "value": round(float(v * 100), 3)} for t, v in zip(next_times, strat)]})
+    hold = np.cumprod(1 + rets) - 1
+    best = max(models, key=lambda m: m["accuracy"])
+    bar = max(50.0, up_rate)
+    acc_s = f"%{best['accuracy']:.1f}".replace(".", ",")
+    pv = f"{best['p_value']:.3f}".replace(".", ",")
+    bar_s = f"%{bar:.1f}".replace(".", ",")
+    if best["p_value"] < 0.05 and best["accuracy"] > bar + 2:
+        grade = "A"
+        verdict = f"{best['model']} son {n} işlem gününde {acc_s} isabetle yazı-turadan istatistiksel olarak anlamlı biçimde daha iyi (p = {pv})."
+    elif best["accuracy"] > bar + 2:
+        grade = "B"
+        verdict = (f"{best['model']} {acc_s} isabetle basit kuralların ({bar_s}) üzerinde, ancak fark istatistiksel olarak kesin değil "
+                   f"(p = {pv}); şansla da açıklanabilir.")
+    else:
+        grade = "C"
+        verdict = (f"Modeller bu varlıkta yazı-tura veya “her gün yükselir” gibi basit kurallardan ({bar_s}) belirgin şekilde iyi değil "
+                   f"(en iyi model {acc_s}). Bu varlık için tahminleri temkinli yorumlayın.")
+    out = {"days": n, "retrain_every": step, "grade": grade, "verdict": verdict, "best": best["model"],
+           "baselines": {"coin": 50.0, "always_up": round(up_rate, 2), "persistence": round(float((persist == actual).mean() * 100), 2)},
+           "buy_hold_return": round(float(hold[-1] * 100), 2),
+           "buy_hold": [{"time": int(t), "value": round(float(v * 100), 3)} for t, v in zip(next_times, hold)],
+           "models": models,
+           "method": (f"Son {n} işlem günü aylık parçalara bölündü. Her parçanın başında modeller yalnızca o tarihe kadarki verilerle "
+                      "yeniden eğitildi ve parçadaki her günün ertesi gün yönünü tahmin etti; gelecekteki veri hiçbir zaman eğitimde "
+                      "kullanılmadı (ileriye yürüyen test).")}
+    _card_cache[key] = (time.time(), out)
+    return out

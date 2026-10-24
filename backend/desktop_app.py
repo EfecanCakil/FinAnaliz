@@ -1,4 +1,4 @@
-"""FinAnaliz masaüstü uygulaması (FinAnaliz.exe giriş noktası).
+"""TradeMetrix masaüstü uygulaması (TradeMetrix.exe giriş noktası).
 
 Yerel FastAPI sunucusunu arka planda başlatır ve arayüzü pywebview ile
 yerel bir Windows penceresinde (WebView2) açar. Pencere kapanınca uygulama
@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-APP_NAME = "FinAnaliz"
+from brand import APP_NAME, LEGACY_DATA_NAME, logo_image  # noqa: E402
 
 # Konsolsuz exe'de stdout/stderr yoktur; kütüphanelerin yazdığı çıktılar hata vermesin
 if sys.stdout is None:
@@ -21,8 +21,9 @@ if sys.stderr is None:
     sys.stderr = open(os.devnull, "w")
 
 # Paketlenmiş (exe) sürümde kullanıcı verileri %APPDATA%\FinAnaliz altında tutulur
+# (uygulama adı TradeMetrix oldu; mevcut hesaplar ve portföyler kaybolmasın diye klasör adı korunur)
 if getattr(sys, "frozen", False):
-    os.environ.setdefault("FINANS_DATA_DIR", str(Path(os.environ.get("APPDATA", Path.home())) / APP_NAME))
+    os.environ.setdefault("FINANS_DATA_DIR", str(Path(os.environ.get("APPDATA", Path.home())) / LEGACY_DATA_NAME))
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -59,15 +60,7 @@ def wait_ready(url: str, timeout: float = 30) -> bool:
 
 
 def tray_image():
-    from PIL import Image, ImageDraw
-
-    size = 64
-    im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.rounded_rectangle((2, 2, size - 2, size - 2), radius=12, fill=(13, 17, 23, 255))
-    d.polygon([(32, 10), (54, 32), (32, 54), (10, 32)], fill=(76, 141, 255, 255))
-    d.line([(18, 40), (27, 31), (34, 36), (47, 22)], fill=(255, 255, 255, 255), width=4)
-    return im
+    return logo_image(64)
 
 
 def tray_enabled() -> bool:
@@ -110,7 +103,7 @@ def main():
 
     version = int((DIST / "index.html").stat().st_mtime) if (DIST / "index.html").exists() else int(time.time())
     window = webview.create_window(
-        f"{APP_NAME} – Yapay Zekâ Destekli Finansal Analiz", f"{url}/?v={version}",
+        f"{APP_NAME} – Yapay Zekâ Destekli Piyasa Analizi", f"{url}/?v={version}",
         width=1440, height=900, min_size=(1000, 650), background_color="#0d1117",
     )
     state["window"] = window
@@ -152,7 +145,7 @@ def main():
         if not state["hidden"]:
             state["hidden"] = True
             try:
-                state["icon"].notify("FinAnaliz arka planda çalışmaya devam ediyor. Fiyat alarmları izleniyor.", APP_NAME)
+                state["icon"].notify(f"{APP_NAME} arka planda çalışmaya devam ediyor. Fiyat alarmları izleniyor.", APP_NAME)
             except Exception:
                 pass
         return False
@@ -162,8 +155,8 @@ def main():
     try:
         import pystray
 
-        icon = pystray.Icon(APP_NAME, tray_image(), f"{APP_NAME} – Finansal Analiz", menu=pystray.Menu(
-            pystray.MenuItem("FinAnaliz'i aç", show_window, default=True),
+        icon = pystray.Icon(APP_NAME, tray_image(), f"{APP_NAME} – Piyasa Analizi", menu=pystray.Menu(
+            pystray.MenuItem(f"{APP_NAME}'i aç", show_window, default=True),
             pystray.MenuItem("Çıkış", quit_app),
         ))
         icon.run_detached()

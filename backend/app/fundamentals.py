@@ -13,15 +13,19 @@ from datetime import datetime
 
 import pandas as pd
 import yfinance as yf
+from fastapi import HTTPException
 
-from . import market
+from . import market, yahoo
 
 _info_cache: dict[str, tuple[float, dict]] = {}
 _div_cache: dict[str, tuple[float, pd.Series]] = {}
+_stmt_cache: dict[str, tuple[float, dict]] = {}
+STMT_TTL = 12 * 3600
 _lock = threading.Lock()
 INFO_TTL = 6 * 3600
 DIV_TTL = 12 * 3600
 FX = {"USD": "USDTRY=X", "EUR": "EURTRY=X"}
+_last_fx: dict[str, float] = {}
 
 
 def _info(symbol: str) -> dict:
@@ -32,29 +36,63 @@ def _info(symbol: str) -> dict:
     info = {}
     for attempt in range(3):
         try:
-            info = yf.Ticker(symbol).info or {}
-        except Exception:
+            with yahoo.slot():
+                info = yf.Ticker(symbol).info or {}
+        except yahoo.YahooBusy:
+            return hit[1] if hit else {}
+        except Exception as e:
+            yahoo.fail(e)
             info = {}
         if len(info) >= 40 or attempt == 2:  # eksik yanıt gelirse (eşzamanlı isteklerde olabiliyor) tekrar dene
             break
         time.sleep(0.5)
     if len(info) >= 40:
+        yahoo.ok()
         with _lock:
             _info_cache[symbol] = (time.time(), info)
     return info
 
 
+def statements(symbol: str, force: bool = False) -> dict:
+    """Çeyreklik/yıllık gelir tablosu, bilanço ve nakit akışı (12 saat önbellekli; force=True önbelleği yeniler)."""
+    with _lock:
+        hit = _stmt_cache.get(symbol)
+    if hit and not force and time.time() - hit[0] < STMT_TTL:
+        return hit[1]
+    out: dict = {}
+    try:
+        with yahoo.slot():
+            t = yf.Ticker(symbol)
+            for key, attr in (("inc", "quarterly_income_stmt"), ("bal", "quarterly_balance_sheet"),
+                              ("cf", "quarterly_cashflow"), ("ainc", "income_stmt"), ("acf", "cashflow")):
+                try:
+                    out[key] = getattr(t, attr)
+                except Exception:
+                    out[key] = None
+    except yahoo.YahooBusy:
+        return hit[1] if hit else {}
+    if any(v is not None and not v.empty for v in out.values()):
+        yahoo.ok()
+        with _lock:
+            _stmt_cache[symbol] = (time.time(), out)
+    return out
+
+
 def dividends_series(symbol: str) -> pd.Series:
     with _lock:
         hit = _div_cache.get(symbol)
-    if hit and time.time() - hit[0] < DIV_TTL:
+    if hit and time.time() - hit[0] < (DIV_TTL if len(hit[1]) else 600):  # boş sonuç kısa süre saklanır
         return hit[1]
     try:
-        s = yf.Ticker(symbol).dividends
+        with yahoo.slot():
+            s = yf.Ticker(symbol).dividends
         s.index = pd.DatetimeIndex(s.index).tz_localize(None).normalize()
         s = s[s > 0]
-    except Exception:
-        s = pd.Series(dtype=float)
+    except yahoo.YahooBusy:
+        return hit[1] if hit else pd.Series(dtype=float)
+    except Exception as e:
+        yahoo.fail(e)
+        return hit[1] if hit else pd.Series(dtype=float)
     with _lock:
         _div_cache[symbol] = (time.time(), s)
     return s
@@ -65,8 +103,17 @@ def _fx_rate(fin_ccy: str | None, trade_ccy: str) -> float:
     if not fin_ccy or fin_ccy == trade_ccy:
         return 1.0
     if trade_ccy == "TRY" and fin_ccy in FX:
-        q = market.quotes([FX[fin_ccy]])[0]
-        return q["price"] or 1.0
+        # Kur alınamazsa sessizce 1 kabul etmek oranları ~50 kat yanlış gösterir; son bilinen kur kullanılır
+        try:
+            rate = market.quotes([FX[fin_ccy]])[0]["price"]
+        except Exception:
+            rate = None
+        if rate:
+            _last_fx[fin_ccy] = rate
+            return rate
+        if fin_ccy in _last_fx:
+            return _last_fx[fin_ccy]
+        raise HTTPException(503, "Döviz kuru şu an alınamadı; oranlar biraz sonra tekrar hesaplanacak.")
     return 1.0
 
 
@@ -168,17 +215,14 @@ def summary(symbol: str, with_statements: bool = True) -> dict:
         "analyst_count": info.get("numberOfAnalystOpinions"),
     }
     if with_statements:
-        t = yf.Ticker(symbol)
+        st = statements(symbol)  # 12 saat önbellekli; bilanço özeti de aynı tabloları kullanır
         rows = {"revenue": ["Total Revenue", "Operating Revenue"], "gross_profit": ["Gross Profit"],
                 "operating_income": ["Operating Income", "EBIT"], "net_income": ["Net Income", "Net Income Common Stockholders"]}
-        try:
-            result["quarterly"] = _statement(t.quarterly_income_stmt, rows, k)
-        except Exception:
-            result["quarterly"] = []
-        try:
-            result["annual"] = _statement(t.income_stmt, rows, k)
-        except Exception:
-            result["annual"] = []
+        for key, src in (("quarterly", "inc"), ("annual", "ainc")):
+            try:
+                result[key] = _statement(st.get(src), rows, k)
+            except Exception:
+                result[key] = []
     return result
 
 

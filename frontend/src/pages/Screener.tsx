@@ -5,6 +5,7 @@ import { Disclaimer, ErrorBox, Loading } from '../components/common'
 import { ExportButton } from '../components/extras'
 import { TradeModal } from '../components/TradePanel'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from '../components/StockCard'
 
 type Row = {
   symbol: string; name: string; market: string; sector: string | null; currency: string; featured: boolean
@@ -295,7 +296,7 @@ export default function Screener() {
                 {filtered.slice(0, limit).map(r => (
                   <tr key={r.symbol}>
                     <td><button className={`star ${watch.has(r.symbol) ? 'on' : ''}`} title={watch.has(r.symbol) ? 'Favorilerden çıkar' : 'Favorilere ekle'} onClick={() => toggleWatch(r.symbol)}>{watch.has(r.symbol) ? '★' : '☆'}</button></td>
-                    <td className="clickable" onClick={() => nav(`/analiz?s=${encodeURIComponent(r.symbol)}`)} title="Grafiği ve teknik analizi aç">
+                    <td className="clickable" onClick={() => openStock(r.symbol)} title="Hisse özetini aç">
                       <div className="sym">{r.symbol.replace('.IS', '')}</div>
                       <div className="muted small ellipsis">{r.name}{r.sector && r.sector !== 'Diğer' ? ` · ${r.sector}` : ''}</div>
                     </td>
@@ -316,7 +317,7 @@ export default function Screener() {
               <button className="btn ghost" onClick={() => setLimit(limit + PAGE)}>Daha fazla göster ({filtered.length - limit} kaldı)</button>
             </div>
           )}
-          <p className="muted small mt">💡 Bir hisseye tıklayınca grafiğini ve detaylı teknik analizini görürsünüz. "Teknik görünüm" göstergelerin genel oylamasıdır; yatırım tavsiyesi değildir.</p>
+          <p className="muted small mt">💡 Bir hisseye tıklayınca özet kartı açılır; oradan detaylı grafiğe geçebilirsiniz. "Teknik görünüm" göstergelerin genel oylamasıdır; yatırım tavsiyesi değildir.</p>
         </div>
       )}
 
@@ -364,7 +365,7 @@ function NlScreener() {
             <div className="table-wrap mt"><table className="table">
               <thead><tr><th>Varlık</th><th className="r">Fiyat</th><th className="r">Günlük</th><th className="r">Aylık</th><th className="r">RSI</th><th className="c">Trend</th><th className="c">Teknik</th>{res.parsed.dividend && <th className="r">Temettü verimi</th>}</tr></thead>
               <tbody>{res.results.map(r => (
-                <tr key={r.symbol} className="clickable" onClick={() => nav(`/analiz?s=${encodeURIComponent(r.symbol)}`)}>
+                <tr key={r.symbol} className="clickable" onClick={() => openStock(r.symbol)}>
                   <td><span className="sym">{r.symbol.replace('.IS', '')}</span> <span className="muted small">{r.name}</span></td>
                   <td className="r mono">{fmtPrice(r.price)}</td><td className={`r mono ${tone(r.change_pct)}`}>{fmtPct(r.change_pct)}</td>
                   <td className={`r mono ${tone(r.change_1m)}`}>{fmtPct(r.change_1m)}</td><td className="r mono">{r.rsi.toFixed(1)}</td>

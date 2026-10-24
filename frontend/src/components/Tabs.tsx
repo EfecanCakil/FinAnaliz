@@ -57,6 +57,9 @@ export default function TabBar({ titleOf }: { titleOf: (path: string) => { label
     } else save({ ...state, tabs })
   }
 
+  // Tek sekme açıkken çubuk gösterilmez (sayfa adı zaten bölüm sekmelerinde yazar);
+  // menüde orta tıklama veya Ctrl+tıklama ile ikinci sekme açılınca görünür.
+  if (state.tabs.length <= 1) return null
   return (
     <div className="tabbar">
       {state.tabs.map(t => {

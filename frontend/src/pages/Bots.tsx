@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, fmtMoney, fmtPrice } from '../api'
-import { ErrorBox, SymbolPicker } from '../components/common'
+import { EmptyState, ErrorBox, SymbolPicker } from '../components/common'
 import { Skeleton } from '../components/ui'
 
 type Bot = {
@@ -56,7 +56,7 @@ export default function Bots() {
       </form>
       <div className="card">
         <h3>Botlarım</h3>
-        {!bots ? <Skeleton rows={3} /> : bots.length === 0 ? <p className="muted">Henüz bot yok.</p> : (
+        {!bots ? <Skeleton rows={3} /> : bots.length === 0 ? <EmptyState icon="🤖" title="Henüz botunuz yok" text="Kuralınızı belirleyin (ör. RSI 30'un altına inince al); bot sizin yerinize sanal bakiyeyle işlem yapsın." /> : (
           <div className="bot-list">
             {bots.map(b => (
               <div key={b.id} className={`bot ${b.active ? '' : 'paused'}`}>

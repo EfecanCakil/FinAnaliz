@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, fmtPct, fmtPrice, tone, type Quote } from '../api'
-import { ErrorBox, Loading, Sparkline, SymbolPicker } from '../components/common'
+import { EmptyState, ErrorBox, Loading, Sparkline, SymbolPicker } from '../components/common'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from '../components/StockCard'
 
 type Alert = {
   id: number; symbol: string; condition: string; target: number | null; triggered: number; triggered_at: string | null
@@ -58,7 +59,7 @@ export default function Watchlist() {
   const addAlert = async (e: FormEvent) => {
     e.preventDefault(); setError(null); setMsg(null)
     try {
-      await api('/alerts', { body: { symbol: form.symbol, condition: form.condition, target: needsTarget ? +form.target : null, repeat: form.repeat, note: form.note || null } })
+      await api('/alerts', { body: { symbol: form.symbol, condition: form.condition, target: needsTarget ? +form.target : null, repeat: form.repeat, note: form.note || null } }); window.dispatchEvent(new Event('finanaliz:alarm-set'))
       setForm({ ...form, target: DEFAULTS[form.condition] ?? '', note: '' })
       setMsg('Alarm kuruldu.')
       loadAlerts()
@@ -84,13 +85,13 @@ export default function Watchlist() {
       <div className="card">
         <h3>İzleme Listesi</h3>
         <SymbolPicker onChange={addWatch} placeholder="Listeye varlık ekle" />
-        {!list ? <Loading /> : list.length === 0 ? <p className="muted mt">Listeniz boş.</p> : (
+        {!list ? <Loading /> : list.length === 0 ? <EmptyState icon="⭐" title="Favori listeniz boş" text="Yukarıdan bir hisse arayıp ekleyin ya da piyasa listelerinde ☆ simgesine tıklayın." /> : (
           <table className="table mt">
             <thead><tr><th>Varlık</th><th className="r">Fiyat</th><th className="r">Günlük</th><th className="r">Haftalık</th><th className="r">Aylık</th><th /><th /></tr></thead>
             <tbody>
               {list.map(q => (
                 <tr key={q.symbol}>
-                  <td className="clickable" onClick={() => nav(`/analiz?s=${encodeURIComponent(q.symbol)}`)}><div className="sym">{q.symbol}</div><div className="muted small">{q.name}</div></td>
+                  <td className="clickable" onClick={() => openStock(q.symbol)}><div className="sym">{q.symbol}</div><div className="muted small">{q.name}</div></td>
                   <td className="r mono">{fmtPrice(q.price)}</td>
                   <td className={`r mono ${tone(q.change_pct)}`}>{fmtPct(q.change_pct)}</td>
                   <td className={`r mono ${tone(q.change_1w)}`}>{fmtPct(q.change_1w)}</td>
@@ -148,7 +149,7 @@ export default function Watchlist() {
           <tbody>
             {alerts.map(a => (
               <tr key={a.id} className={a.triggered && !a.repeat ? 'dim' : ''}>
-                <td className="sym clickable" onClick={() => nav(`/analiz?s=${encodeURIComponent(a.symbol)}`)}>{a.symbol}</td>
+                <td className="sym clickable" onClick={() => openStock(a.symbol)}>{a.symbol}</td>
                 <td>{alertText(a, conds)}</td>
                 <td>{a.repeat ? <span className="pill">Tekrarlayan</span> : <span className="pill">Tek seferlik</span>}</td>
                 <td>{a.triggered && !a.repeat ? <span className="pill up">Tetiklendi</span> : <span className="pill">Aktif</span>}
@@ -157,7 +158,7 @@ export default function Watchlist() {
                 <td className="r"><button className="btn ghost small" onClick={() => delAlert(a.id)}>Sil</button></td>
               </tr>
             ))}
-            {alerts.length === 0 && <tr><td colSpan={6} className="muted">Henüz alarm yok.</td></tr>}
+            {alerts.length === 0 && <tr><td colSpan={6}><EmptyState icon="🔔" title="Henüz alarm kurmadınız" text="Fiyat belirlediğiniz seviyeye gelince bildirim alın. İpucu: Teknik Analiz grafiğine sağ tıklayarak da alarm kurabilirsiniz." /></td></tr>}
           </tbody>
         </table>
       </div>

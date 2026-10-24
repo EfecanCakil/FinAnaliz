@@ -133,7 +133,7 @@ def check(uid: int | None = None) -> list[dict]:
         notifications.add(f["user_id"], "alert", f"Alarm: {f['message']}",
                           (f"Fiyat: {f['price']:.4g}" if f.get("price") else "") + (f" · Not: {f['note']}" if f.get("note") else ""),
                           f"/analiz?s={f['symbol']}")
-        send_telegram(f"🔔 FinAnaliz alarmı: {f['message']}" + (f" (fiyat: {f['price']:.4g})" if f.get("price") else "")
+        send_telegram(f"🔔 TradeMetrix alarmı: {f['message']}" + (f" (fiyat: {f['price']:.4g})" if f.get("price") else "")
                       + (f"\nNot: {f['note']}" if f.get("note") else ""))
     return fired
 

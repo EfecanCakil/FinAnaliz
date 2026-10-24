@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, fmtPct, fmtPrice, marketStatus, tone, type Quote } from '../api'
-import { Disclaimer, ErrorBox, Sparkline } from '../components/common'
+import { Disclaimer, EmptyState, ErrorBox, Sparkline } from '../components/common'
 import { LivePrice, Skeleton, Treemap } from '../components/ui'
 import { useAutoRefresh } from '../refresh'
+import { openStock } from '../components/StockCard'
 
 type Overview = { names: Record<string, string>; markets: Record<string, Quote[]> }
 
@@ -72,7 +73,7 @@ export default function Dashboard() {
   const removeFav = (s: string) => api(`/watchlist/${encodeURIComponent(s)}`, { method: 'DELETE' }).then(() => setFavs(f => f?.filter(q => q.symbol !== s) ?? null))
 
   const all = data ? Object.values(data.markets).flat().filter(q => q.change_pct !== null) : []
-  const open = (s: string) => nav(`/analiz?s=${encodeURIComponent(s)}`)
+  const open = (s: string) => openStock(s)
   const headline = HEADLINE.map(s => all.find(q => q.symbol === s)).filter(Boolean) as Quote[]
   const tradable = all.filter(q => !q.is_index)
   const sorted = [...tradable].sort((a, b) => b.change_pct! - a.change_pct!)
@@ -99,7 +100,7 @@ export default function Dashboard() {
     favorites: () => (
       <div className="card">
         <div className="row between"><h3>★ Favorilerim</h3><Link to="/izleme" className="small">Düzenle →</Link></div>
-        {!favs ? <Skeleton rows={3} /> : favs.length === 0 ? <p className="muted">Henüz favori yok. Piyasa sayfalarındaki ☆ simgesine tıklayarak ekleyebilirsiniz.</p> : (
+        {!favs ? <Skeleton rows={3} /> : favs.length === 0 ? <EmptyState icon="⭐" title="Henüz favoriniz yok" text="Takip etmek istediğiniz hisselerin yanındaki ☆ simgesine tıklayın; burada en üstte görünürler." action={<Link className="btn ghost small" to="/piyasa/bist">Hisselere göz at →</Link>} /> : (
           <div className="movers">
             {favs.map(q => (
               <div key={q.symbol} className="mover clickable" onClick={() => open(q.symbol)}>
@@ -218,6 +219,7 @@ export default function Dashboard() {
       </header>
       {edit && <div className="info-box small">Kartları tutup sürükleyerek veya ↑ ↓ düğmeleriyle sıralayın; 👁 ile gizleyip gösterin.
         <button className="btn ghost small ml" onClick={() => setLayout({ order: SECTIONS.map(s => s.id), hidden: [] })}>Varsayılana dön</button></div>}
+      <TodayCard />
       <ErrorBox error={error} />
       {!data && !error ? <Skeleton rows={8} text="Piyasa verileri çekiliyor…" /> : (
         <div className="dash-grid">
@@ -244,6 +246,33 @@ export default function Dashboard() {
         </div>
       )}
       <Disclaimer />
+    </div>
+  )
+}
+
+type Today = { greeting: string; headline: string; lines: { icon: string; text: string; tone: string; symbol?: string }[]; as_of: number }
+
+// "Bugün ne oldu?": piyasalar, portföy, favoriler ve alarmlar için birkaç sade cümle
+function TodayCard() {
+  const [t, setT] = useState<Today | null>(null)
+  const load = () => api<Today>('/today').then(setT).catch(() => {})
+  useEffect(() => { load() }, [])
+  useAutoRefresh(load)
+  if (!t) return <div className="card today-card"><div className="skeleton" style={{ height: 22, width: '40%' }} /><div className="skeleton mt" style={{ height: 70 }} /></div>
+  return (
+    <div className="card today-card">
+      <div className="row between wrap gap">
+        <h3>☀️ {t.greeting}! Bugün ne oldu?</h3>
+        <span className="muted small">{new Date(t.as_of * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} itibarıyla · fiyatlar gecikmeli olabilir</span>
+      </div>
+      {t.headline && <p className="today-headline">{t.headline}</p>}
+      <ul className="today-lines">
+        {t.lines.map((l, i) => (
+          <li key={i} className={l.symbol ? 'clickable' : ''} onClick={() => l.symbol && openStock(l.symbol)}>
+            <span className="today-icon">{l.icon}</span><span className={l.tone}>{l.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

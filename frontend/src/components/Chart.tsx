@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   AreaSeries, CandlestickSeries, ColorType, createChart, createSeriesMarkers, HistogramSeries, LineSeries, LineStyle,
   type IChartApi, type ISeriesApi, type SeriesMarker, type Time, type UTCTimestamp,
@@ -35,6 +35,8 @@ type Props = {
   onChart?: (chart: IChartApi | null) => void
   /** Aynı gruptaki grafikler zaman ekseninde birlikte kaydırılır/yakınlaştırılır. */
   syncGroup?: string
+  /** Sağ tıklama: imlecin olduğu fiyat ve ekran konumu (ör. "bu fiyata alarm kur" menüsü için). */
+  onRightClick?: (price: number | null, clientX: number, clientY: number) => void
 }
 
 const syncGroups = new Map<string, Set<IChartApi>>()
@@ -65,7 +67,11 @@ export function ChartStyleToggle() {
   )
 }
 
-const ts = (t: number) => t as UTCTimestamp
+// Grafik kütüphanesi zamanları UTC olarak yazar. BIST'in 20 Ekim mumu "19 Ekim 21:00 UTC" olduğundan grafikte 19 Ekim
+// görünürdü; zamanlar yerel saat dilimine kaydırılarak gün etiketleri ve gün içi saatler doğru gösterilir.
+const tzOff = (t: number) => -new Date(t * 1000).getTimezoneOffset() * 60
+const ts = (t: number) => (t + tzOff(t)) as UTCTimestamp
+const fromTs = (t: number) => t - tzOff(t - tzOff(t))
 
 /** Açık/koyu tema değiştiğinde grafiklerin yeniden çizilmesi için. */
 export function useThemeKey() {
@@ -78,11 +84,14 @@ export function useThemeKey() {
   return key
 }
 
-export default function Chart({ series, height = 420, paneHeights, levels = [], percent, markers, priceLines, onClick, cursor, onChart, syncGroup }: Props) {
+export default function Chart({ series, height = 420, paneHeights, levels = [], percent, markers, priceLines, onClick, cursor, onChart, syncGroup, onRightClick }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const clickRef = useRef(onClick)
   clickRef.current = onClick
+  const rightRef = useRef(onRightClick)
+  rightRef.current = onRightClick
+  const mainRef = useRef<ISeriesApi<any> | null>(null)
   const theme = useThemeKey()
   const [style] = useChartStyle()
 
@@ -162,12 +171,13 @@ export default function Chart({ series, height = 420, paneHeights, levels = [], 
     if (main && markers?.length) {
       createSeriesMarkers(main, [...markers].sort((a, b) => a.time - b.time).map(m => ({ ...m, time: ts(m.time) })) as SeriesMarker<Time>[])
     }
+    mainRef.current = main
     if (main) {
       const ms = main
       chart.subscribeClick(param => {
         if (!clickRef.current || !param.point) return
         const time = (param.time as number | undefined) ?? (chart.timeScale().coordinateToTime(param.point.x) as number | null)
-        clickRef.current(time ?? null, ms.coordinateToPrice(param.point.y))
+        clickRef.current(time == null ? null : fromTs(time), ms.coordinateToPrice(param.point.y))
       })
     }
 
@@ -196,5 +206,12 @@ export default function Chart({ series, height = 420, paneHeights, levels = [], 
     return () => { unsync(); onChart?.(null); chart.remove(); chartRef.current = null }
   }, [series, height, paneHeights, levels, percent, markers, priceLines, theme, syncGroup, style])
 
-  return <div ref={ref} className="chart" style={{ height, cursor }} />
+  const onContext = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!rightRef.current || !ref.current) return
+    e.preventDefault()
+    const y = e.clientY - ref.current.getBoundingClientRect().top
+    const p = mainRef.current?.coordinateToPrice(y)
+    rightRef.current(p == null ? null : Number(p), e.clientX, e.clientY)
+  }
+  return <div ref={ref} className="chart" style={{ height, cursor }} onContextMenu={onContext} />
 }
